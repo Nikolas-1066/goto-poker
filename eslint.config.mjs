@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Собранный Windows-пакет и кэш сборки — не наш исходный код
+    "dist/**",
+    "deploy/.cache/**",
   ]),
 ]);
 
