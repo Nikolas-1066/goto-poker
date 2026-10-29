@@ -133,11 +133,17 @@ fi
 echo "--- Ежедневный бэкап базы"
 cat > /etc/cron.daily/goto-poker-backup <<'CRON'
 #!/bin/sh
-# Копия базы турниров, храним 60 дней
-SRC=/var/lib/goto-poker/goto-poker.json
+# Копия базы турниров, храним 60 дней.
+# Программа сама делает целые копии SQLite в /var/lib/goto-poker/backups (при запуске и после турнира) —
+# берём самую свежую. Копировать сам goto-poker.db во время работы нельзя: копия может выйти битой.
+DATA=/var/lib/goto-poker
 DST=/var/backups/goto-poker
-[ -f "$SRC" ] && cp "$SRC" "$DST/goto-poker-$(date +%F).json"
+LATEST=$(ls -1t "$DATA"/backups/goto-poker-*-start.db "$DATA"/backups/goto-poker-*-finish.db 2>/dev/null | head -1)
+[ -n "$LATEST" ] && cp "$LATEST" "$DST/goto-poker-$(date +%F).db"
+# старая версия программы (до SQLite)
+[ -f "$DATA/goto-poker.json" ] && cp "$DATA/goto-poker.json" "$DST/goto-poker-$(date +%F).json"
 find "$DST" -name 'goto-poker-*.json' -mtime +60 -delete
+find "$DST" -name 'goto-poker-*.db' -mtime +60 -delete
 CRON
 chmod 755 /etc/cron.daily/goto-poker-backup
 

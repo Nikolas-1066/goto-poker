@@ -96,8 +96,20 @@ systemctl restart goto-poker         # применить
 ls /var/backups/goto-poker           # ежедневные копии базы (60 дней)
 ```
 
-База: `/var/lib/goto-poker/goto-poker.json`. Чтобы восстановить из бэкапа —
-скопировать файл поверх и выполнить `systemctl restart goto-poker`.
+База: `/var/lib/goto-poker/goto-poker.db` (SQLite; старый `goto-poker.json` при первом
+запуске новой версии переносится в неё автоматически и переименовывается в `.migrated`).
+Программа сама делает копии в `/var/lib/goto-poker/backups/` при запуске и после каждого
+турнира (последние 30), а ежедневный cron складывает свежую копию в `/var/backups/goto-poker`.
+
+Восстановить из копии:
+
+```bash
+systemctl stop goto-poker
+rm -f /var/lib/goto-poker/goto-poker.db /var/lib/goto-poker/goto-poker.db-wal /var/lib/goto-poker/goto-poker.db-shm
+cp /var/backups/goto-poker/goto-poker-ДАТА.db /var/lib/goto-poker/goto-poker.db
+chown goto:goto /var/lib/goto-poker/goto-poker.db
+systemctl start goto-poker
+```
 
 ## Если в клубе пропал интернет
 

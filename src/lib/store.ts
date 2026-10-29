@@ -1,11 +1,13 @@
 // Серверное хранилище: база SQLite data/goto-poker.db (см. src/lib/db/).
 // При первом запуске туда автоматически переносится старый data/goto-poker.json.
+// Резервные копии — в data/backups/ при запуске и при завершении турнира (см. db/backup.ts).
 // Если SQLite не запустилась, а перенос ещё не делался — работаем по-старому, на JSON-файле.
 // Путь к папке данных можно поменять через DATA_DIR.
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
+import { backupDatabase, finishedNow, type BackupReason } from "./db/backup";
 import { freshDb, normalizeLegacy, openStore, transaction, writeState } from "./db/sqlite";
 import type { Db } from "./types";
 
@@ -28,6 +30,7 @@ async function load(): Promise<Db> {
     if (opened.initialized === "json") console.log("[store] данные перенесены из goto-poker.json в goto-poker.db");
     store.sqlite = opened.db;
     store.db = opened.state;
+    safeBackup("start");
   } catch (err) {
     // Запасной путь — только пока данные ещё не переехали в базу (JSON на месте).
     if (!(await exists(JSON_FILE))) throw err;
@@ -41,8 +44,19 @@ async function save(prev: Db, next: Db) {
   if (store.sqlite) {
     const sqlite = store.sqlite;
     transaction(sqlite, () => writeState(sqlite, prev, next));
+    if (finishedNow(prev, next)) safeBackup("finish");
   } else {
     await persistJson(next);
+  }
+}
+
+/** Резервная копия; если не получилась — пишем в журнал, но турнир не останавливаем. */
+function safeBackup(reason: BackupReason) {
+  if (!store.sqlite) return;
+  try {
+    backupDatabase(store.sqlite, DATA_DIR, reason);
+  } catch (err) {
+    console.error(`[store] не удалось сделать резервную копию (${reason})`, err);
   }
 }
 
