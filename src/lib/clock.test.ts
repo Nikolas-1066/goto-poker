@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyAction, boardView, emptyTournament, formatClock, resolveClock, structureDurationMs } from "./clock";
+import { applyAction, boardView, breaksOf, emptyTournament, formatClock, resolveClock, structureDurationMs } from "./clock";
 import type { Preset, Tournament, TournamentAction } from "./types";
 
 const MIN = 60_000;
@@ -14,7 +14,7 @@ const preset: Preset = {
   addonStack: 40000,
   doubleAddonStack: 80000,
   rebuyUntilLevel: 2,
-  addonUntilLevel: 3,
+  addonUntilLevel: 2, // аддон — на перерыве после 2 уровня
   steps: [
     { id: "l1", kind: "level", sb: 100, bb: 200, ante: 0, minutes: 10 },
     { id: "l2", kind: "level", sb: 200, bb: 400, ante: 400, minutes: 10 },
@@ -215,9 +215,9 @@ describe("ребаи и аддоны в идущем турнире", () => {
   it("можно включить/поменять уровни, не перезагружая пресет; таймер не сбивается", () => {
     const off = act(started(), { type: "setRules", rebuyUntilLevel: 0, addonUntilLevel: 0 }, T0 + MIN);
     expect(boardView(off, T0 + MIN).rebuyOpen).toBe(false);
-    const on = act(off, { type: "setRules", rebuyUntilLevel: 3, addonUntilLevel: 4 }, T0 + 2 * MIN);
-    expect(on.structure).toMatchObject({ rebuyUntilLevel: 3, addonUntilLevel: 4 });
-    expect(boardView(on, T0 + 2 * MIN)).toMatchObject({ rebuyOpen: true, addonOpen: true });
+    const on = act(off, { type: "setRules", rebuyUntilLevel: 3, addonUntilLevel: 2 }, T0 + 2 * MIN);
+    expect(on.structure).toMatchObject({ rebuyUntilLevel: 3, addonUntilLevel: 2 });
+    expect(boardView(on, T0 + 2 * MIN)).toMatchObject({ rebuyOpen: true, addonOpen: false, addonUpcoming: true });
     expect(resolveClock(on, T0 + 2 * MIN).remainingMs).toBe(8 * MIN);
     expect(preset.rebuyUntilLevel).toBe(2); // сам пресет не меняется
   });
@@ -282,8 +282,36 @@ describe("что показывает табло", () => {
     expect(boardView(t, T0 + 15 * MIN).rebuyOpen).toBe(true); // уровень 2
     expect(boardView(t, T0 + 21 * MIN).rebuyOpen).toBe(true); // перерыв после уровня 2
     expect(boardView(t, T0 + 26 * MIN).rebuyOpen).toBe(false); // уровень 3
-    expect(boardView(t, T0 + 26 * MIN).addonOpen).toBe(true); // аддоны до уровня 3
-    expect(boardView(t, T0 + 36 * MIN).addonOpen).toBe(false); // уровень 4
+  });
+
+  it("аддон — только на выбранном перерыве (после 2 уровня), до него — «впереди», после — закрыт", () => {
+    const t = started();
+    expect(boardView(t, T0 + 5 * MIN)).toMatchObject({ addonOpen: false, addonUpcoming: true }); // уровень 1
+    expect(boardView(t, T0 + 15 * MIN)).toMatchObject({ addonOpen: false, addonUpcoming: true }); // уровень 2
+    expect(boardView(t, T0 + 21 * MIN)).toMatchObject({ addonOpen: true, addonUpcoming: false }); // перерыв после 2
+    expect(boardView(t, T0 + 26 * MIN)).toMatchObject({ addonOpen: false, addonUpcoming: false }); // уровень 3
+  });
+
+  it("аддон на перерыве после уровня, за которым перерыва нет, — не откроется никогда", () => {
+    const t = act(started(), { type: "setRules", rebuyUntilLevel: 2, addonUntilLevel: 3 }, T0);
+    for (const m of [5, 15, 21, 26, 36]) expect(boardView(t, T0 + m * MIN).addonOpen).toBe(false);
+  });
+
+  it("список перерывов для выбора аддона", () => {
+    expect(breaksOf(preset.steps)).toEqual([{ number: 1, afterLevel: 2, note: "Укрупнение" }]);
+    expect(
+      breaksOf([
+        { id: "b0", kind: "break", minutes: 5 }, // перерыв до первого уровня — не в счёт
+        { id: "l1", kind: "level", sb: 1, bb: 2, ante: 0, minutes: 10 },
+        { id: "b1", kind: "break", minutes: 5 },
+        { id: "l2", kind: "level", sb: 1, bb: 2, ante: 0, minutes: 10 },
+        { id: "l3", kind: "level", sb: 1, bb: 2, ante: 0, minutes: 10 },
+        { id: "b2", kind: "break", minutes: 5 },
+      ]).map((b) => [b.number, b.afterLevel]),
+    ).toEqual([
+      [1, 1],
+      [2, 3],
+    ]);
   });
 
   it("после завершения турнира ребаи и аддоны закрыты", () => {

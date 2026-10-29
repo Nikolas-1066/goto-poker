@@ -41,6 +41,8 @@ export type ParticipantView = {
   /** Событие последнего вылета (для отмены) и кто выбил */
   lastBustEventId: number | null;
   knockedOutBy: string[];
+  /** Аддон игрока — для отмены в любой момент */
+  addonEventId: number | null;
 };
 
 export type PlayerAction =
@@ -162,6 +164,7 @@ export function listParticipants(db: DatabaseSync, tournamentId: number, finishe
       tableNo: r.table_no,
       seatNo: r.seat_no,
       lastBustEventId: x?.lastBustId ?? null,
+      addonEventId: x?.addonEventId ?? null,
       knockedOutBy: (bust?.knockers ?? []).map((k) => names.get(k.participantId) ?? "?"),
     };
   });

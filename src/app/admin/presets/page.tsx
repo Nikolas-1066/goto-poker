@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AddonBreakSelect } from "@/components/admin/AddonBreakSelect";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Button, Card, Field, inputClass } from "@/components/admin/ui";
 import { formatChips, formatClock, structureDurationMs } from "@/lib/clock";
@@ -319,22 +320,22 @@ function PresetForm({
           <Field label="Ребаи до конца уровня (0 — нет)">
             <NumInput value={draft.rebuyUntilLevel} onChange={(v) => set({ rebuyUntilLevel: v })} />
           </Field>
-          <Field label="Аддоны до конца уровня (0 — нет)">
-            <NumInput value={draft.addonUntilLevel} onChange={(v) => set({ addonUntilLevel: v })} />
+          <Field label="Аддон — на перерыве">
+            <AddonBreakSelect steps={draft.steps} value={draft.addonUntilLevel} onChange={(v) => set({ addonUntilLevel: v })} />
           </Field>
           {(draft.rebuyUntilLevel === 0 || draft.addonUntilLevel === 0) && (
             <div className="rounded-lg border border-amber-300/30 bg-amber-300/[0.07] px-3 py-2 col-span-2 text-xs text-amber-200">
               {draft.rebuyUntilLevel === 0 && draft.addonUntilLevel === 0
-                ? "Ребаи и аддоны выключены (0)"
+                ? "Ребаи и аддон выключены"
                 : draft.rebuyUntilLevel === 0
-                  ? "Ребаи выключены (0)"
-                  : "Аддоны выключены (0)"}
-              : в турнире «по игрокам» этих кнопок не будет. Укажите уровень, до конца которого они разрешены.
+                  ? "Ребаи выключены"
+                  : "Аддон выключен"}
+              : в турнире «по игрокам» этих кнопок не будет. Укажите уровень для ребаев и перерыв для аддона.
               Уже загруженный турнир правка пресета не меняет — там это настраивается в карточке «Игроки».
             </div>
           )}
           <div className="col-span-2 self-end pb-2 text-xs text-slate-500">
-            Включая перерыв сразу после этого уровня. Обычно аддон берут на перерыве, когда закрываются ребаи.
+            Ребаи — включая перерыв сразу после этого уровня. Аддон берут только на выбранном перерыве.
           </div>
         </div>
         <div className="mt-4 text-sm text-slate-400">

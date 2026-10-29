@@ -38,6 +38,8 @@ export type ParticipantResult = {
   placeTo: number | null;
   /** Событие последнего вылета (если сейчас вылетел) */
   lastBustId: number | null;
+  /** Событие аддона (обычного или двойного) — чтобы его можно было отменить */
+  addonEventId: number | null;
 };
 
 export type TournamentResults = {
@@ -64,6 +66,7 @@ function blank(participantId: number): ParticipantResult {
     place: null,
     placeTo: null,
     lastBustId: null,
+    addonEventId: null,
   };
 }
 
@@ -102,6 +105,7 @@ export function computeResults(events: JournalEvent[], opts: { finished?: boolea
         if (r.status !== "playing") break;
         if (e.type === "addon") r.addons += 1;
         else r.doubleAddons += 1;
+        r.addonEventId = e.id;
         break;
       case "bust":
         if (r.status !== "playing") break;
@@ -251,6 +255,8 @@ export function checkAction(
     case "cancel": {
       const e = events.find((x) => x.id === action.eventId);
       if (!e || e.cancelled) return "Это действие уже отменено";
+      // Аддон ни на что не влияет — его можно отменить в любой момент (админ перепутал игрока)
+      if (e.type === "addon" || e.type === "double_addon") return null;
       // Нельзя отменить действие, на котором держатся более поздние действия того же игрока
       // (например, вход, после которого он уже вылетел): сначала отмените их.
       const later = active(events).filter(

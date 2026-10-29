@@ -262,7 +262,10 @@ export type BoardView = ClockView & {
   /** Сыгранный/текущий уровень для правил ребаев (во время перерыва — уровень перед ним) */
   periodLevel: number;
   rebuyOpen: boolean;
+  /** Аддон можно взять сейчас: идёт тот самый перерыв */
   addonOpen: boolean;
+  /** Перерыв для аддона ещё впереди */
+  addonUpcoming: boolean;
 };
 
 export function boardView(t: Tournament, now: number): BoardView {
@@ -316,7 +319,11 @@ export function boardView(t: Tournament, now: number): BoardView {
   const periodLevel = Math.max(1, levelNo(clock.index));
   const finished = t.status === "finished";
   const rebuyOpen = !!s && !finished && (s.rebuyUntilLevel ?? 0) > 0 && periodLevel <= s.rebuyUntilLevel;
-  const addonOpen = !!s && !finished && (s.addonUntilLevel ?? 0) > 0 && periodLevel <= s.addonUntilLevel;
+  // аддон — только на перерыве после уровня addonUntilLevel (во время перерыва periodLevel = уровень перед ним)
+  const addonLevel = s?.addonUntilLevel ?? 0;
+  const addonOpen = !!s && !finished && addonLevel > 0 && step?.kind === "break" && periodLevel === addonLevel;
+  const addonUpcoming =
+    !!s && !finished && addonLevel > 0 && !addonOpen && (periodLevel < addonLevel || (periodLevel === addonLevel && step?.kind !== "break"));
   const avgStack = t.playersLeft > 0 && totalChips > 0 ? Math.round(totalChips / t.playersLeft) : null;
 
   return {
@@ -332,6 +339,7 @@ export function boardView(t: Tournament, now: number): BoardView {
     periodLevel,
     rebuyOpen,
     addonOpen,
+    addonUpcoming,
   };
 }
 
@@ -349,4 +357,15 @@ export const formatChips = (n: number) => n.toLocaleString("ru-RU");
 
 export function structureDurationMs(steps: Step[]) {
   return steps.reduce((acc, s) => acc + stepMs(s), 0);
+}
+
+/** Перерывы структуры для выбора «аддон на перерыве»: номер перерыва и уровень перед ним */
+export function breaksOf(steps: Step[]) {
+  const list: { number: number; afterLevel: number; note?: string }[] = [];
+  let levels = 0;
+  for (const st of steps) {
+    if (st.kind === "level") levels += 1;
+    else if (levels > 0) list.push({ number: list.length + 1, afterLevel: levels, note: st.note });
+  }
+  return list;
 }

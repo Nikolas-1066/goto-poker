@@ -311,22 +311,24 @@ function Header({ name }: { name?: string }) {
 function RebuyAddonStatus({ tournament, view }: { tournament: Tournament; view: BoardView }) {
   const s = tournament.structure;
   if (!s) return null;
-  const rows: { label: string; open: boolean; until: number }[] = [];
-  if (s.rebuyUntilLevel > 0) rows.push({ label: "Ребай", open: view.rebuyOpen, until: s.rebuyUntilLevel });
-  if (s.addonUntilLevel > 0) rows.push({ label: "Аддон", open: view.addonOpen, until: s.addonUntilLevel });
+  const rows: { label: string; open: boolean; text: string }[] = [];
+  if (s.rebuyUntilLevel > 0)
+    rows.push({ label: "Ребай", open: view.rebuyOpen, text: view.rebuyOpen ? `открыт · до ${s.rebuyUntilLevel} ур.` : "закрыт" });
+  if (s.addonUntilLevel > 0)
+    rows.push({
+      label: "Аддон",
+      open: view.addonOpen,
+      text: view.addonOpen ? "сейчас, на перерыве" : view.addonUpcoming ? `на перерыве после ${s.addonUntilLevel} ур.` : "закрыт",
+    });
   if (rows.length === 0) return null;
   return (
     <div className="space-y-2 border-t border-white/[0.07] pt-4">
       {rows.map((r) => (
         <div key={r.label} className="flex items-center justify-between gap-2 text-xs xl:text-sm">
           <span className="text-slate-500">{r.label}</span>
-          {r.open ? (
-            <span className="font-semibold text-emerald-300">
-              открыт · до {r.until} ур.
-            </span>
-          ) : (
-            <span className="text-slate-600">закрыт</span>
-          )}
+          <span className={r.open ? "font-semibold text-emerald-300" : r.text === "закрыт" ? "text-slate-600" : "text-slate-400"}>
+            {r.text}
+          </span>
         </div>
       ))}
     </div>

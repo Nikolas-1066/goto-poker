@@ -156,7 +156,11 @@ describe("re-entry и аддоны", () => {
     expect(() => player({ type: "reentry", participantId: byName("Ира").id, force: true })).toThrow("В финале re-entry нет");
   });
 
+  /** «Стандарт»: аддон на перерыве после 8 уровня — это шаг №9 структуры */
+  const toAddonBreak = () => clock({ type: "goto", index: 9 }, T0);
+
   it("аддон и двойной аддон считаются по игроку и на табло", () => {
+    toAddonBreak();
     player({ type: "addon", participantId: byName("Саша").id });
     player({ type: "double_addon", participantId: byName("Ира").id });
     expect(byName("Саша").addons).toBe(1);
@@ -167,10 +171,32 @@ describe("re-entry и аддоны", () => {
     expect(state.tournament).toMatchObject({ addons: 1, doubleAddons: 1 });
   });
 
-  it("после закрытия аддонов — только с подтверждением", () => {
-    clock({ type: "start" }, T0);
+  it("аддон не на своём перерыве (уровни до и после) — только с подтверждением", () => {
+    expect(() => player({ type: "addon", participantId: byName("Саша").id })).toThrow(NeedsForceError); // уровень 1
+    clock({ type: "goto", index: 4 }, T0); // первый перерыв (после 4 уровня) — не тот
+    expect(() => player({ type: "addon", participantId: byName("Саша").id })).toThrow(NeedsForceError);
     clock({ type: "goto", index: 12 }, T0 + MIN);
     expect(() => player({ type: "addon", participantId: byName("Саша").id }, T0 + 2 * MIN)).toThrow(NeedsForceError);
+    player({ type: "addon", participantId: byName("Саша").id, force: true }, T0 + 3 * MIN);
+    expect(byName("Саша").addons).toBe(1);
+  });
+
+  it("перепутали игрока: аддон можно отменить в любой момент, даже после других действий", () => {
+    toAddonBreak();
+    player({ type: "addon", participantId: byName("Саша").id }, T0 + 1000);
+    player({ type: "double_addon", participantId: byName("Ира").id }, T0 + 2000);
+    bust(byName("Ира").id, T0 + 3000, byName("Саша").id); // Саша потом ещё и выбил Иру
+    expect(byName("Саша").addonEventId).not.toBeNull();
+    player({ type: "cancel", eventId: byName("Саша").addonEventId! }, T0 + 4000);
+    expect(byName("Саша")).toMatchObject({ addons: 0, addonEventId: null, ko: 1 });
+    expect(lastResult!.message).toBe("Отменено: аддон — Саша");
+    // у вылетевшей Иры тоже можно отменить
+    player({ type: "cancel", eventId: byName("Ира").addonEventId! }, T0 + 5000);
+    expect(byName("Ира")).toMatchObject({ doubleAddons: 0, status: "busted" });
+    expect(state.tournament).toMatchObject({ addons: 0, doubleAddons: 0 });
+    // и выдать правильному — на перерыве без вопросов
+    player({ type: "addon", participantId: byName("Саша").id }, T0 + 6000);
+    expect(byName("Саша").addons).toBe(1);
   });
 });
 

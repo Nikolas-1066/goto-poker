@@ -5,7 +5,8 @@ import { AdminShell } from "@/components/admin/AdminShell";
 import { TournamentPlayers } from "@/components/admin/TournamentPlayers";
 import { Button, Card, Counter, Field, inputClass } from "@/components/admin/ui";
 import { boardView, formatChips, formatClock, stepMs } from "@/lib/clock";
-import type { Preset, Tournament, TournamentAction, TournamentMode } from "@/lib/types";
+import { AddonBreakSelect } from "@/components/admin/AddonBreakSelect";
+import type { Preset, Step, Tournament, TournamentAction, TournamentMode } from "@/lib/types";
 import { useTournament } from "@/lib/useTournament";
 
 export default function AdminPage() {
@@ -196,7 +197,14 @@ function Control() {
           title="Игроки"
           className="scroll-mt-16"
           id="players"
-          action={<RebuyAddonBadges tournament={tournament} rebuyOpen={view.rebuyOpen} addonOpen={view.addonOpen} />}
+          action={
+            <RebuyAddonBadges
+              tournament={tournament}
+              rebuyOpen={view.rebuyOpen}
+              addonOpen={view.addonOpen}
+              addonUpcoming={view.addonUpcoming}
+            />
+          }
         >
           <ModeSwitch mode={tournament.mode} onChange={setMode} />
           {tournament.structure && status !== "finished" && (
@@ -204,6 +212,7 @@ function Control() {
               key={`${tournament.structure.rebuyUntilLevel}-${tournament.structure.addonUntilLevel}`}
               rebuyUntilLevel={tournament.structure.rebuyUntilLevel ?? 0}
               addonUntilLevel={tournament.structure.addonUntilLevel ?? 0}
+              steps={tournament.structure.steps}
               onSave={(rebuyUntilLevel, addonUntilLevel) => act({ type: "setRules", rebuyUntilLevel, addonUntilLevel })}
             />
           )}
@@ -591,29 +600,30 @@ function RebuyAddonBadges({
   tournament,
   rebuyOpen,
   addonOpen,
+  addonUpcoming,
 }: {
   tournament: Tournament;
   rebuyOpen: boolean;
   addonOpen: boolean;
+  addonUpcoming: boolean;
 }) {
   const s = tournament.structure;
   if (!s) return null;
-  const badge = (label: string, open: boolean, until: number) =>
-    until > 0 ? (
-      <span
-        key={label}
-        className={`rounded-full border px-2 py-0.5 text-[11px] ${
-          open ? "border-emerald-400/40 text-emerald-300" : "border-white/10 text-slate-500"
-        }`}
-        title={`до конца ${until} уровня`}
-      >
-        {label} {open ? `до ${until} ур.` : "закрыт"}
-      </span>
-    ) : null;
+  const badge = (label: string, open: boolean, text: string) => (
+    <span
+      key={label}
+      className={`rounded-full border px-2 py-0.5 text-[11px] ${
+        open ? "border-emerald-400/40 text-emerald-300" : "border-white/10 text-slate-500"
+      }`}
+    >
+      {label} {text}
+    </span>
+  );
   return (
     <div className="flex flex-wrap justify-end gap-1">
-      {badge("Ребай", rebuyOpen, s.rebuyUntilLevel)}
-      {badge("Аддон", addonOpen, s.addonUntilLevel)}
+      {s.rebuyUntilLevel > 0 && badge("Ребай", rebuyOpen, rebuyOpen ? `до ${s.rebuyUntilLevel} ур.` : "закрыт")}
+      {s.addonUntilLevel > 0 &&
+        badge("Аддон", addonOpen, addonOpen ? "сейчас" : addonUpcoming ? `на перерыве после ${s.addonUntilLevel} ур.` : "закрыт")}
     </div>
   );
 }
@@ -687,10 +697,12 @@ function ModeSwitch({ mode, onChange }: { mode: TournamentMode; onChange: (m: To
 function RulesLine({
   rebuyUntilLevel,
   addonUntilLevel,
+  steps,
   onSave,
 }: {
   rebuyUntilLevel: number;
   addonUntilLevel: number;
+  steps: Step[];
   onSave: (rebuy: number, addon: number) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -698,6 +710,7 @@ function RulesLine({
   const [addon, setAddon] = useState(String(addonUntilLevel));
   const off = rebuyUntilLevel === 0 && addonUntilLevel === 0;
   const text = (n: number) => (n > 0 ? `до конца ${n} ур.` : "нет");
+  const addonText = addonUntilLevel > 0 ? `на перерыве после ${addonUntilLevel} ур.` : "нет";
 
   if (editing) {
     return (
@@ -706,11 +719,13 @@ function RulesLine({
           <Field label="Ребаи (re-entry) до конца уровня">
             <input className={inputClass} inputMode="numeric" value={rebuy} onChange={(e) => setRebuy(e.target.value.replace(/\D/g, ""))} />
           </Field>
-          <Field label="Аддоны до конца уровня">
-            <input className={inputClass} inputMode="numeric" value={addon} onChange={(e) => setAddon(e.target.value.replace(/\D/g, ""))} />
+          <Field label="Аддон — на перерыве">
+            <AddonBreakSelect steps={steps} value={Number(addon) || 0} onChange={(v) => setAddon(String(v))} />
           </Field>
         </div>
-        <div className="text-xs text-slate-500">0 — выключено. Перерыв после этого уровня тоже считается.</div>
+        <div className="text-xs text-slate-500">
+          Ребаи: 0 — выключены, перерыв после этого уровня тоже считается. Аддон берут только на выбранном перерыве.
+        </div>
         <div className="grid grid-cols-2 gap-2">
           <Button onClick={() => setEditing(false)}>Отмена</Button>
           <Button
@@ -738,7 +753,7 @@ function RulesLine({
           <>Ребаи и аддоны в этом турнире выключены — кнопок «Re-entry» и «+А» не будет.</>
         ) : (
           <>
-            Ребаи: {text(rebuyUntilLevel)} · Аддоны: {text(addonUntilLevel)}
+            Ребаи: {text(rebuyUntilLevel)} · Аддон: {addonText}
           </>
         )}
       </div>

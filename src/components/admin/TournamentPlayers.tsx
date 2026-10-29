@@ -346,7 +346,8 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
                   Вылет
                 </Button>
               )}
-              {addonOpen && !finished && p.addons + p.doubleAddons === 0 && (
+              {!finished && p.addonEventId != null && <UndoAddon p={p} busy={busy} onCancel={(eventId) => act({ type: "cancel", eventId })} />}
+            {addonOpen && !finished && p.addons + p.doubleAddons === 0 && (
                 <>
                   <Button disabled={busy} onClick={() => act({ type: "addon", participantId: p.id })} title="Аддон">
                     +А
@@ -365,6 +366,7 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
         <Section title={`Вылетели · ${busted.length}`}>
           {busted.map((p) => (
             <Row key={p.id} p={p} place>
+              {!finished && p.addonEventId != null && <UndoAddon p={p} busy={busy} onCancel={(eventId) => act({ type: "cancel", eventId })} />}
               {p.lastBustEventId != null && !finished && (
                 <Button
                   variant="ghost"
@@ -746,5 +748,20 @@ function DealPanel({
         </Button>
       </div>
     </div>
+  );
+}
+
+/** Отменить аддон в любой момент — если админ отметил не тому игроку */
+function UndoAddon({ p, busy, onCancel }: { p: ParticipantView; busy: boolean; onCancel: (eventId: number) => void }) {
+  const what = p.doubleAddons > 0 ? "двойной аддон" : "аддон";
+  return (
+    <Button
+      variant="ghost"
+      title={`Отменить ${what}`}
+      disabled={busy}
+      onClick={() => window.confirm(`Отменить ${what} у игрока ${p.name}?`) && onCancel(p.addonEventId!)}
+    >
+      ↺ {p.doubleAddons > 0 ? "2А" : "А"}
+    </Button>
   );
 }
