@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ParticipantView, PlayerAction } from "@/lib/db/tournament";
 import { formatPlace } from "@/lib/results";
 import { phoneTail, searchPlayers, type Player } from "@/lib/players";
+import { formatSeat, MAX_SEATS, MAX_TABLES } from "@/lib/seating";
 import type { Tournament } from "@/lib/types";
 import { Button, inputClass } from "./ui";
 
@@ -29,6 +30,24 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
   const [bustOf, setBustOf] = useState<ParticipantView | null>(null);
   /** Открыт экран дила (места оставшихся расставляются вручную) */
   const [dealOpen, setDealOpen] = useState(false);
+  /** У кого открыт выбор стола и места */
+  const [seatOf, setSeatOf] = useState<number | null>(null);
+
+  /** Строка игрока с выбором стола по нажатию на имя */
+  const seatable = (p: ParticipantView) => ({
+    onPick: () => setSeatOf(seatOf === p.id ? null : p.id),
+    seatEditor:
+      seatOf === p.id ? (
+        <SeatEditor
+          p={p}
+          others={participants.filter((o) => o.id !== p.id && o.status !== "busted")}
+          busy={busy}
+          onSeat={async (tableNo, seatNo) => {
+            if (await act({ type: "seat", participantId: p.id, tableNo, seatNo })) setSeatOf(null);
+          }}
+        />
+      ) : null,
+  });
   /** Подсказка после действия с кнопкой «Отменить» (10 секунд) */
   const [toast, setToast] = useState<{ message: string; undoEventId: number | null } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -271,7 +290,7 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
       {!finished && registered.length > 0 && (
         <Section title={`Записались · ${registered.length}`}>
           {registered.map((p) => (
-            <Row key={p.id} p={p}>
+            <Row key={p.id} p={p} {...(finished ? {} : seatable(p))}>
               <Button variant="ghost" title="Убрать из записи" disabled={busy} onClick={() => act({ type: "unregister", participantId: p.id })}>
                 ✕
               </Button>
@@ -313,7 +332,7 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
             />
           )}
           {playing.map((p) => (
-            <Row key={p.id} p={p}>
+            <Row key={p.id} p={p} {...(finished ? {} : seatable(p))}>
               {!finished && playing.length > 1 && (
                 <Button
                   variant="danger"
@@ -398,25 +417,112 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Row({ p, place, children }: { p: ParticipantView; place?: boolean; children?: React.ReactNode }) {
+function Row({
+  p,
+  place,
+  children,
+  onPick,
+  seatEditor,
+}: {
+  p: ParticipantView;
+  place?: boolean;
+  children?: React.ReactNode;
+  /** Нажатие на имя — открыть выбор стола */
+  onPick?: () => void;
+  seatEditor?: React.ReactNode;
+}) {
+  const seat = formatSeat(p.tableNo, p.seatNo);
   const details = [
+    p.status !== "busted" && seat,
     p.entries > 1 && `входов ${p.entries}`,
     p.addons > 0 && `А ${p.addons}`,
     p.doubleAddons > 0 && `2А ${p.doubleAddons}`,
     p.ko > 0 && `KO ${String(p.ko).replace(".", ",")}`,
     p.status === "busted" && p.knockedOutBy.length > 0 && `выбил ${p.knockedOutBy.join(" и ")}`,
   ].filter(Boolean);
-  return (
-    <div className="flex items-center gap-2 py-2">
-      {place && <div className="w-9 shrink-0 text-center font-bold tabular-nums text-slate-400">{formatPlace(p)}</div>}
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-semibold">{p.name}</div>
-        <div className="truncate text-xs text-slate-500">
-          {p.phoneTail}
-          {details.length > 0 && ` · ${details.join(" · ")}`}
-        </div>
+  const info = (
+    <>
+      <div className="truncate font-semibold">{p.name}</div>
+      <div className="truncate text-xs text-slate-500">
+        {p.phoneTail}
+        {details.length > 0 && ` · ${details.join(" · ")}`}
+        {onPick && !seat && <span className="text-slate-600"> · стол?</span>}
       </div>
-      <div className="flex shrink-0 gap-1">{children}</div>
+    </>
+  );
+  return (
+    <div className="py-2">
+      <div className="flex items-center gap-2">
+        {place && <div className="w-9 shrink-0 text-center font-bold tabular-nums text-slate-400">{formatPlace(p)}</div>}
+        {onPick ? (
+          <button type="button" className="min-w-0 flex-1 text-left" onClick={onPick} title="Стол и место">
+            {info}
+          </button>
+        ) : (
+          <div className="min-w-0 flex-1">{info}</div>
+        )}
+        <div className="flex shrink-0 gap-1">{children}</div>
+      </div>
+      {seatEditor}
+    </div>
+  );
+}
+
+/** Выбор стола (1–3) и места (1–10). Занятые места других игроков — недоступны. */
+function SeatEditor({
+  p,
+  others,
+  busy,
+  onSeat,
+}: {
+  p: ParticipantView;
+  others: ParticipantView[];
+  busy: boolean;
+  onSeat: (tableNo: number | null, seatNo: number | null) => void;
+}) {
+  const [table, setTable] = useState<number | null>(p.tableNo ?? null);
+  const taken = new Map(others.filter((o) => o.tableNo === table && o.seatNo != null).map((o) => [o.seatNo!, o.name]));
+  const tables = Array.from({ length: MAX_TABLES }, (_, i) => i + 1);
+  const seats = Array.from({ length: MAX_SEATS }, (_, i) => i + 1);
+  return (
+    <div className="mt-2 space-y-2 rounded-lg border border-white/[0.08] bg-black/20 p-2">
+      <div className="flex flex-wrap gap-1">
+        {tables.map((n) => (
+          <Button key={n} variant={table === n ? "primary" : "default"} onClick={() => setTable(n)}>
+            Стол {n}
+          </Button>
+        ))}
+        {p.tableNo != null && (
+          <Button variant="ghost" disabled={busy} onClick={() => onSeat(null, null)}>
+            Без стола
+          </Button>
+        )}
+      </div>
+      {table != null && (
+        <>
+          <div className="text-xs text-slate-500">Место за столом {table}:</div>
+          <div className="grid grid-cols-5 gap-1">
+            {seats.map((n) => {
+              const who = taken.get(n);
+              const mine = p.tableNo === table && p.seatNo === n;
+              return (
+                <Button
+                  key={n}
+                  variant={mine ? "primary" : "default"}
+                  disabled={busy || !!who}
+                  title={who ? `Занято: ${who}` : undefined}
+                  onClick={() => onSeat(table, n)}
+                >
+                  {n}
+                </Button>
+              );
+            })}
+          </div>
+          <Button variant="ghost" className="w-full" disabled={busy} onClick={() => onSeat(table, null)}>
+            Стол {table}, место не важно
+          </Button>
+        </>
+      )}
     </div>
   );
 }
@@ -447,7 +553,11 @@ function BustPanel({
   const [addingBusted, setAddingBusted] = useState(false);
 
   const byId = new Map(playing.map((p) => [p.id, p]));
-  const candidates = playing.filter((p) => !busted.includes(p.id));
+  // сначала — игроки с того же стола, что и вылетевший
+  const table = first.tableNo;
+  const candidates = playing
+    .filter((p) => !busted.includes(p.id))
+    .sort((a, b) => Number(table != null && b.tableNo === table) - Number(table != null && a.tableNo === table));
   const left = playing.length;
   const from = left - busted.length + 1;
   const placeText = busted.length === 1 ? `${left} место` : `места ${from}–${left}`;
@@ -555,6 +665,7 @@ function BustPanel({
                   }}
                 >
                   <span className="truncate">{p.name}</span>
+                  {p.tableNo != null && <span className="ml-auto shrink-0 text-xs opacity-60">ст. {p.tableNo}</span>}
                 </Button>
               );
             })}

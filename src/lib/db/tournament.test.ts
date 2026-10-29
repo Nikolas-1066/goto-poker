@@ -364,3 +364,47 @@ describe("отмена", () => {
     expect(log.n).toBe(1);
   });
 });
+
+describe("рассадка", () => {
+  beforeEach(() => {
+    player({ type: "enter", playerId: sasha });
+    player({ type: "enter", playerId: ira });
+    player({ type: "register", playerId: oleg });
+  });
+  const seat = (name: string, tableNo: number | null, seatNo: number | null) =>
+    player({ type: "seat", participantId: byName(name).id, tableNo, seatNo });
+
+  it("посадить за стол и на место, пересадить, убрать", () => {
+    seat("Саша", 2, 5);
+    expect(byName("Саша")).toMatchObject({ tableNo: 2, seatNo: 5 });
+    expect(lastResult!.message).toBe("Саша — стол 2, место 5");
+    seat("Саша", 1, null);
+    expect(byName("Саша")).toMatchObject({ tableNo: 1, seatNo: null });
+    seat("Саша", null, null);
+    expect(byName("Саша")).toMatchObject({ tableNo: null, seatNo: null });
+    expect(lastResult!.message).toBe("Саша — без стола");
+  });
+
+  it("записавшегося можно посадить заранее", () => {
+    seat("Олег", 3, 1);
+    expect(byName("Олег")).toMatchObject({ status: "registered", tableNo: 3, seatNo: 1 });
+  });
+
+  it("занятое место — понятная ошибка; после вылета место освобождается", () => {
+    seat("Саша", 1, 4);
+    expect(() => seat("Ира", 1, 4)).toThrow("Стол 1, место 4 уже занято: Саша");
+    expect(() => seat("Олег", 1, 4)).toThrow("уже занято: Саша");
+    // место без номера у двоих — можно
+    seat("Ира", 1, null);
+    seat("Олег", 1, null);
+    bust(byName("Саша").id, T0 + 1000, byName("Ира").id);
+    seat("Олег", 1, 4);
+    expect(byName("Олег").seatNo).toBe(4);
+  });
+
+  it("стол и место — в разрешённых пределах", () => {
+    expect(() => seat("Саша", 4, 1)).toThrow("Стол — от 1 до 3");
+    expect(() => seat("Саша", 1, 11)).toThrow("Место — от 1 до 10");
+    expect(() => seat("Саша", 0, 1)).toThrow("Стол — от 1 до 3");
+  });
+});

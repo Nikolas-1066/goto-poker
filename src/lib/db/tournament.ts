@@ -4,6 +4,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { applyAction, boardView } from "../clock";
 import { phoneTail } from "../players";
+import { MAX_SEATS, MAX_TABLES } from "../seating";
 import {
   checkAction,
   computeResults,
@@ -36,6 +37,7 @@ export type ParticipantView = {
   registeredAt: number;
   arrivedAt: number | null;
   tableNo: number | null;
+  seatNo: number | null;
   /** Событие последнего вылета (для отмены) и кто выбил */
   lastBustEventId: number | null;
   knockedOutBy: string[];
@@ -58,6 +60,8 @@ export type PlayerAction =
   | { type: "bust"; busted: { participantId: number; handOrder: number }[]; knockers: number[] }
   /** Отменить действие; вылет в общей раздаче отменяется целиком */
   | { type: "cancel"; eventId: number }
+  /** Посадить за стол (1–3) и место (1–10); null — убрать. Без автобалансировки */
+  | { type: "seat"; participantId: number; tableNo: number | null; seatNo: number | null }
   /** Завершить турнир. Если в игре несколько (дил) — dealOrder: их порядок по местам */
   | { type: "finish"; dealOrder?: number[] }
   | { type: "setMode"; mode: TournamentMode };
@@ -115,7 +119,7 @@ export function loadJournal(db: DatabaseSync, tournamentId: number): JournalEven
 export function listParticipants(db: DatabaseSync, tournamentId: number, finished = false): ParticipantView[] {
   const rows = db
     .prepare(
-      `SELECT p.id, p.player_id, p.registered_at, p.arrived_at, p.table_no, p.place AS saved_place,
+      `SELECT p.id, p.player_id, p.registered_at, p.arrived_at, p.table_no, p.seat_no, p.place AS saved_place,
               p.place_to AS saved_place_to, p.ko AS saved_ko, pl.name, pl.phone
        FROM participants p JOIN players pl ON pl.id = p.player_id
        WHERE p.tournament_id = ?`,
@@ -126,6 +130,7 @@ export function listParticipants(db: DatabaseSync, tournamentId: number, finishe
     registered_at: number;
     arrived_at: number | null;
     table_no: number | null;
+    seat_no: number | null;
     saved_place: number | null;
     saved_place_to: number | null;
     saved_ko: number;
@@ -155,6 +160,7 @@ export function listParticipants(db: DatabaseSync, tournamentId: number, finishe
       registeredAt: r.registered_at,
       arrivedAt: r.arrived_at,
       tableNo: r.table_no,
+      seatNo: r.seat_no,
       lastBustEventId: x?.lastBustId ?? null,
       knockedOutBy: (bust?.knockers ?? []).map((k) => names.get(k.participantId) ?? "?"),
     };
@@ -338,6 +344,26 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
       const what = { entry: "вход", reentry: "re-entry", addon: "аддон", double_addon: "двойной аддон", bust: "вылет" }[e.type];
       message = `Отменено: ${what} — ${name(e.participant_id)}${group.length > 1 ? ` и ещё ${group.length - 1}` : ""}`;
       audit(db, "tournament.cancel", { tournamentId: cur.id, eventIds: group.map((g) => g.id) }, now);
+      break;
+    }
+    case "seat": {
+      const p = participantOf(db, cur.id, action.participantId);
+      const table = action.tableNo == null ? null : Number(action.tableNo);
+      const seat = table == null || action.seatNo == null ? null : Number(action.seatNo);
+      if (table != null && !(Number.isInteger(table) && table >= 1 && table <= MAX_TABLES)) throw new Error(`Стол — от 1 до ${MAX_TABLES}`);
+      if (seat != null && !(Number.isInteger(seat) && seat >= 1 && seat <= MAX_SEATS)) throw new Error(`Место — от 1 до ${MAX_SEATS}`);
+      if (table != null && seat != null) {
+        // место занято другим игроком, который сейчас в игре или записан
+        const res = computeResults(journal());
+        const taken = (
+          db
+            .prepare("SELECT id FROM participants WHERE tournament_id = ? AND table_no = ? AND seat_no = ? AND id <> ?")
+            .all(cur.id, table, seat, p.id) as { id: number }[]
+        ).find((x) => res.participants.get(x.id)?.status !== "busted");
+        if (taken) throw new Error(`Стол ${table}, место ${seat} уже занято: ${name(taken.id)}`);
+      }
+      db.prepare("UPDATE participants SET table_no = ?, seat_no = ? WHERE id = ?").run(table, seat, p.id);
+      message = table == null ? `${name(p.id)} — без стола` : `${name(p.id)} — стол ${table}${seat != null ? `, место ${seat}` : ""}`;
       break;
     }
     case "finish": {
