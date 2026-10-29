@@ -5,7 +5,9 @@ import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { applyAction } from "../clock";
 import type { Db, TournamentAction } from "../types";
-import { correctResults, finalizeResults, getTournamentDetails, listHistory, validatePlaces } from "./history";
+import { DEFAULT_RULES } from "../rating/points";
+import { correctResults, finalizeResults, getTournamentDetails, listHistory, outdatedCount, rescoreAll, validatePlaces } from "./history";
+import { saveRules } from "./rules";
 import { createPlayer } from "./players";
 import { openStore, transaction, writeState } from "./sqlite";
 import { applyPlayerAction, archiveCurrentIfUsed, currentTournament, listParticipants, type PlayerAction } from "./tournament";
@@ -250,5 +252,81 @@ describe("проверка мест", () => {
     expect(() => validatePlaces([1, 2, 2, 3])).toThrow("должно идти 4-е");
     expect(() => validatePlaces([1, 0])).toThrow("от 1 до 2");
     expect(() => validatePlaces([1, 1.5])).toThrow("от 1 до 2");
+  });
+});
+
+describe("очки рейтинга", () => {
+  const points = () => Object.fromEntries(getTournamentDetails(db, tid())!.results.map((r) => [r.name, r.points]));
+
+  it("при завершении: по формуле RATING.md, поле — 4 игрока (коэф. 0,45)", () => {
+    // 4 игрока → √(4/20) = 0,447 → 0,45
+    bust("Женя", "Саша", T0 + 2000); // 4 место
+    bust("Олег", "Ира", T0 + 3000); // 3 место
+    bust("Ира", "Саша", T0 + 4000); // 2 место, 1 KO
+    player({ type: "finish" }, T0 + 5000);
+    expect(points()).toEqual({
+      Саша: 55, // 100 × 0,45 + 2 × 5 = 55
+      Ира: 39, // 75 × 0,45 + 5 = 38,75 → 39
+      Олег: 27, // 60 × 0,45 = 27
+      Женя: 23, // 50 × 0,45 = 22,5 → 23
+    });
+    expect(getTournamentDetails(db, tid())!.rulesId).toBe(1);
+    expect(byName("Саша").points).toBe(55);
+  });
+
+  it("re-entry — минус 5, но не меньше минимума", () => {
+    write((d) => {
+      d.tournament.structure!.rebuyUntilLevel = 8;
+    });
+    bust("Женя", "Саша", T0 + 2000);
+    player({ type: "reentry", participantId: byName("Женя").id }, T0 + 2500);
+    bust("Женя", "Саша", T0 + 3000); // снова 4 место, 2 входа
+    bust("Олег", "Ира", T0 + 4000);
+    bust("Ира", "Саша", T0 + 5000);
+    player({ type: "finish" }, T0 + 6000);
+    expect(points().Женя).toBe(18); // 22,5 − 5 = 17,5 → 18
+  });
+
+  it("равные стеки — среднее за делимые места", () => {
+    bust("Женя", "Саша", T0 + 2000);
+    player(
+      { type: "bust", busted: [{ participantId: byName("Олег").id, handOrder: 1 }, { participantId: byName("Ира").id, handOrder: 1 }], knockers: [byName("Саша").id] },
+      T0 + 3000,
+    );
+    player({ type: "finish" }, T0 + 4000);
+    // места 2–3: (75 + 60) / 2 × 0,45 = 30,375 → 30
+    expect([points().Олег, points().Ира]).toEqual([30, 30]);
+  });
+
+  it("исправление итогов пересчитывает очки по той же версии правил, даже если правила уже поменяли", () => {
+    bust("Женя", "Саша", T0 + 2000);
+    bust("Олег", "Ира", T0 + 3000);
+    bust("Ира", "Саша", T0 + 4000);
+    player({ type: "finish" }, T0 + 5000);
+    saveRules(db, { ...DEFAULT_RULES, koPoints: 100 });
+    const rows = getTournamentDetails(db, tid())!.results.map((r) => ({ ...r, ko: r.name === "Олег" ? 1 : r.ko }));
+    correctResults(db, tid(), rows.map((r) => (r.name === "Ира" ? { ...r, ko: 0 } : r)));
+    expect(points().Олег).toBe(32); // 27 + 5 (а не +100 по новым правилам)
+    expect(getTournamentDetails(db, tid())!.rulesId).toBe(1);
+  });
+
+  it("«Пересчитать» — все сыгранные турниры по текущим правилам", () => {
+    bust("Женя", "Саша", T0 + 2000);
+    bust("Олег", "Ира", T0 + 3000);
+    bust("Ира", "Саша", T0 + 4000);
+    player({ type: "finish" }, T0 + 5000);
+    expect(outdatedCount(db)).toEqual({ currentId: 1, outdated: 0 });
+    saveRules(db, { ...DEFAULT_RULES, koPoints: 10 });
+    expect(outdatedCount(db)).toEqual({ currentId: 2, outdated: 1 });
+    expect(points().Саша).toBe(55); // пока по старым
+    expect(rescoreAll(db)).toBe(1);
+    expect(points().Саша).toBe(65); // 45 + 2 × 10
+    expect(outdatedCount(db).outdated).toBe(0);
+  });
+
+  it("идущий турнир и турнир «вручную» не пересчитываются", () => {
+    bust("Женя", "Саша", T0 + 2000);
+    expect(rescoreAll(db)).toBe(0);
+    expect(points().Женя).toBeNull();
   });
 });

@@ -3,7 +3,9 @@
 // считаться рейтинг (Этап 2). Журнал events остаётся как есть — это история того, что было.
 
 import type { DatabaseSync } from "node:sqlite";
+import { tournamentPoints, type TournamentKind } from "../rating/points";
 import { computeResults } from "../results";
+import { currentRules, rulesById, type RulesVersion } from "./rules";
 import { audit } from "./sqlite";
 import { loadJournal } from "./tournament";
 
@@ -43,6 +45,7 @@ export function finalizeResults(db: DatabaseSync, tournamentId: number, dealOrde
     upd.run(r.status, r.place, r.placeTo, r.entries, r.ko, id);
   }
   db.prepare("UPDATE tournaments SET deal = ? WHERE id = ?").run(isDeal ? 1 : 0, tournamentId);
+  scoreTournament(db, tournamentId, currentRules(db, now));
   audit(db, "tournament.finish", { tournamentId, players: res.fieldSize, deal: isDeal ? dealOrder : undefined }, now);
 }
 
@@ -118,26 +121,31 @@ export type ResultRow = {
   addons: number;
   doubleAddons: number;
   ko: number;
+  /** Очки рейтинга; null — не посчитаны (турнир не завершён или место не выставлено) */
+  points: number | null;
 };
 
 export type TournamentDetails = HistoryItem & {
   counters: { entries: number; rebuys: number; addons: number; doubleAddons: number };
   results: ResultRow[];
+  /** По какой версии правил посчитаны очки */
+  rulesId: number | null;
 };
 
 export function getTournamentDetails(db: DatabaseSync, id: number): TournamentDetails | null {
   const item = listHistory(db).find((h) => h.id === id);
   if (!item) return null;
-  const t = db.prepare("SELECT entries, rebuys, addons, double_addons FROM tournaments WHERE id = ?").get(id) as {
+  const t = db.prepare("SELECT entries, rebuys, addons, double_addons, rules_id FROM tournaments WHERE id = ?").get(id) as {
     entries: number;
     rebuys: number;
     addons: number;
     double_addons: number;
+    rules_id: number | null;
   };
   const res = computeResults(loadJournal(db, id), { finished: item.status === "finished" });
   const rows = db
     .prepare(
-      `SELECT p.id, p.player_id, p.status, p.place, p.place_to, p.entries, p.ko, pl.name
+      `SELECT p.id, p.player_id, p.status, p.place, p.place_to, p.entries, p.ko, p.points, pl.name
        FROM participants p JOIN players pl ON pl.id = p.player_id
        WHERE p.tournament_id = ? AND p.status NOT IN ('registered', 'no_show')`,
     )
@@ -149,6 +157,7 @@ export function getTournamentDetails(db: DatabaseSync, id: number): TournamentDe
     place_to: number | null;
     entries: number;
     ko: number;
+    points: number | null;
     name: string;
   }[];
   const finished = item.status === "finished";
@@ -166,6 +175,7 @@ export function getTournamentDetails(db: DatabaseSync, id: number): TournamentDe
         addons: x?.addons ?? 0,
         doubleAddons: x?.doubleAddons ?? 0,
         ko: finished ? r.ko : (x?.ko ?? 0),
+        points: finished ? r.points : null,
       };
     })
     .sort((a, b) => (a.place ?? 9999) - (b.place ?? 9999) || a.name.localeCompare(b.name, "ru"));
@@ -173,6 +183,7 @@ export function getTournamentDetails(db: DatabaseSync, id: number): TournamentDe
     ...item,
     counters: { entries: t.entries, rebuys: t.rebuys, addons: t.addons, doubleAddons: t.double_addons },
     results,
+    rulesId: finished ? t.rules_id : null,
   };
 }
 
@@ -252,5 +263,65 @@ export function correctResults(db: DatabaseSync, tournamentId: number, rows: unk
     upd.run(r.place, placeTo, r.ko, r.entries, r.participantId);
   }
   if (changes.length) audit(db, "tournament.correct", { tournamentId, changes }, now);
+  // очки — по той же версии правил, по которой турнир уже был посчитан (правила задним числом не меняем)
+  const own = db.prepare("SELECT rules_id FROM tournaments WHERE id = ?").get(tournamentId) as { rules_id: number | null };
+  scoreTournament(db, tournamentId, (own.rules_id != null && rulesById(db, own.rules_id)) || currentRules(db, now));
   return changes.length;
+}
+
+// ---------- Очки рейтинга ----------
+
+/**
+ * Посчитать очки всех участников завершённого турнира по версии правил и запомнить версию.
+ * Поле N — участники, которые входили в турнир (без «записался, но не пришёл»).
+ */
+export function scoreTournament(db: DatabaseSync, tournamentId: number, version: RulesVersion) {
+  const t = db.prepare("SELECT kind FROM tournaments WHERE id = ?").get(tournamentId) as { kind: TournamentKind } | undefined;
+  if (!t) throw new Error("Турнир не найден");
+  const rows = db
+    .prepare(
+      `SELECT id, place, place_to, entries, ko FROM participants
+       WHERE tournament_id = ? AND status NOT IN ('registered', 'no_show')`,
+    )
+    .all(tournamentId) as { id: number; place: number | null; place_to: number | null; entries: number; ko: number }[];
+  const upd = db.prepare("UPDATE participants SET points = ? WHERE id = ?");
+  for (const r of rows) {
+    const points =
+      r.place == null
+        ? null
+        : tournamentPoints(
+            { place: r.place, placeTo: r.place_to, ko: r.ko, entries: r.entries, fieldSize: rows.length, kind: t.kind },
+            version.rules,
+          );
+    upd.run(points, r.id);
+  }
+  db.prepare("UPDATE tournaments SET rules_id = ? WHERE id = ?").run(version.id, tournamentId);
+}
+
+/** Сколько завершённых турниров посчитано не по текущим правилам (для кнопки «Пересчитать») */
+export function outdatedCount(db: DatabaseSync, now = Date.now()) {
+  const cur = currentRules(db, now);
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM tournaments t
+       WHERE t.status = 'finished' AND EXISTS (SELECT 1 FROM participants p WHERE p.tournament_id = t.id)
+         AND (t.rules_id IS NULL OR t.rules_id <> ?)`,
+    )
+    .get(cur.id) as { n: number };
+  return { currentId: cur.id, outdated: row.n };
+}
+
+/** «Пересчитать»: очки всех завершённых турниров по текущим правилам. Возвращает число турниров. */
+export function rescoreAll(db: DatabaseSync, now = Date.now()) {
+  const cur = currentRules(db, now);
+  const ids = db
+    .prepare(
+      `SELECT t.id FROM tournaments t
+       WHERE t.status = 'finished' AND EXISTS (SELECT 1 FROM participants p WHERE p.tournament_id = t.id)
+       ORDER BY t.id`,
+    )
+    .all() as { id: number }[];
+  for (const { id } of ids) scoreTournament(db, id, cur);
+  audit(db, "rules.rescore", { rulesId: cur.id, tournaments: ids.length }, now);
+  return ids.length;
 }

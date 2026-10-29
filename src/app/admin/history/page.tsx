@@ -258,6 +258,7 @@ function Details({ id, onBack }: { id: number; onBack: () => void }) {
                 <th className="w-16 py-2 text-center">Входов</th>
                 <th className="hidden w-16 py-2 text-center sm:table-cell">Аддон</th>
                 <th className="w-12 py-2 text-center">KO</th>
+                <th className="w-14 py-2 text-right">Очки</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.06]">
@@ -270,10 +271,18 @@ function Details({ id, onBack }: { id: number; onBack: () => void }) {
                     {r.doubleAddons ? "двойной" : r.addons ? "да" : "—"}
                   </td>
                   <td className="py-2 text-center tabular-nums">{r.ko ? num(r.ko) : "—"}</td>
+                  <td className="py-2 text-right font-bold tabular-nums text-amber-200">{r.points ?? "—"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+          {finished && (
+            <div className="mt-2 text-xs text-slate-500">
+              {t.rulesId != null
+                ? `Очки — по правилам рейтинга, версия ${t.rulesId}.`
+                : "Очки ещё не посчитаны — нажмите «Пересчитать» в разделе «Рейтинг»."}
+            </div>
+          )}
           {flash && <div className="mt-3 text-sm text-emerald-300">{flash}</div>}
           {finished ? (
             <Button className="mt-4" onClick={startEdit}>

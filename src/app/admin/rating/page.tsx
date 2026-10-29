@@ -189,8 +189,52 @@ function Rating() {
         </div>
       </Card>
 
-      <Calculator rules={parsed.rules ?? saved.rules} draftChanged={dirty} />
+      <div className="space-y-5">
+        <Rescore rulesId={saved.id} />
+        <Calculator rules={parsed.rules ?? saved.rules} draftChanged={dirty} />
+      </div>
     </div>
+  );
+}
+
+/** «Пересчитать»: очки сыгранных турниров по текущим правилам (по RATING.md — только по кнопке) */
+function Rescore({ rulesId }: { rulesId: number }) {
+  const [outdated, setOutdated] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    fetch("/api/rating/rescore", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setOutdated(d.outdated ?? 0))
+      .catch(() => {});
+  }, [rulesId]);
+
+  async function run() {
+    if (!window.confirm("Пересчитать очки всех сыгранных турниров по текущим правилам? Старые очки заменятся.")) return;
+    setBusy(true);
+    const res = await fetch("/api/rating/rescore", { method: "POST" });
+    const data = await res.json();
+    setBusy(false);
+    if (!res.ok) return setMessage(data.error ?? "Не удалось пересчитать");
+    setOutdated(data.outdated);
+    setMessage(`Пересчитано турниров: ${data.tournaments}`);
+  }
+
+  return (
+    <Card title="Пересчёт очков">
+      <div className="text-sm text-slate-400">
+        {outdated === null
+          ? "…"
+          : outdated === 0
+            ? `Все сыгранные турниры посчитаны по текущим правилам (версия ${rulesId}).`
+            : `Турниров, посчитанных по старым правилам или ещё не посчитанных: ${outdated}.`}
+      </div>
+      {message && <div className="mt-2 text-sm text-emerald-300">{message}</div>}
+      <Button className="mt-3" variant={outdated ? "primary" : "default"} disabled={busy || outdated === 0} onClick={run}>
+        Пересчитать все турниры
+      </Button>
+    </Card>
   );
 }
 

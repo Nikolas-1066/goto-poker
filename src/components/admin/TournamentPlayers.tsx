@@ -441,6 +441,7 @@ function Row({
     p.doubleAddons > 0 && `2А ${p.doubleAddons}`,
     p.ko > 0 && `KO ${String(p.ko).replace(".", ",")}`,
     p.status === "busted" && p.knockedOutBy.length > 0 && `выбил ${p.knockedOutBy.join(" и ")}`,
+    p.points != null && `${p.points} очк.`,
   ].filter(Boolean);
   const info = (
     <>

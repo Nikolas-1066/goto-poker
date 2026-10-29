@@ -8,20 +8,30 @@ import { audit } from "./sqlite";
 
 export type RulesVersion = { id: number; createdAt: number; rules: RatingRules };
 
+function parse(row: { id: number; created_at: number; rules_json: string }): RulesVersion {
+  // старая версия могла не знать новых полей — дополняем значениями по умолчанию
+  const saved = JSON.parse(row.rules_json) as Partial<RatingRules>;
+  return {
+    id: row.id,
+    createdAt: row.created_at,
+    rules: { ...DEFAULT_RULES, ...saved, statusCoef: { ...DEFAULT_RULES.statusCoef, ...saved.statusCoef }, elo: { ...DEFAULT_RULES.elo, ...saved.elo } },
+  };
+}
+
+/** Правила конкретной версии (по ней посчитан турнир); null — нет такой */
+export function rulesById(db: DatabaseSync, id: number): RulesVersion | null {
+  const row = db.prepare("SELECT id, created_at, rules_json FROM rating_rules WHERE id = ?").get(id) as
+    | { id: number; created_at: number; rules_json: string }
+    | undefined;
+  return row ? parse(row) : null;
+}
+
 /** Текущие правила; при первом обращении записываются правила по умолчанию из RATING.md */
 export function currentRules(db: DatabaseSync, now = Date.now()): RulesVersion {
   const row = db.prepare("SELECT id, created_at, rules_json FROM rating_rules ORDER BY id DESC LIMIT 1").get() as
     | { id: number; created_at: number; rules_json: string }
     | undefined;
-  if (row) {
-    // старая версия могла не знать новых полей — дополняем значениями по умолчанию
-    const saved = JSON.parse(row.rules_json) as Partial<RatingRules>;
-    return {
-      id: row.id,
-      createdAt: row.created_at,
-      rules: { ...DEFAULT_RULES, ...saved, statusCoef: { ...DEFAULT_RULES.statusCoef, ...saved.statusCoef }, elo: { ...DEFAULT_RULES.elo, ...saved.elo } },
-    };
-  }
+  if (row) return parse(row);
   const id = Number(
     db.prepare("INSERT INTO rating_rules (created_at, rules_json) VALUES (?, ?)").run(now, JSON.stringify(DEFAULT_RULES)).lastInsertRowid,
   );
