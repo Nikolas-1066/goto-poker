@@ -227,7 +227,10 @@ export function checkAction(
     }
     case "addon":
     case "double_addon": {
-      if (r(action.participantId).status !== "playing") return `${name(action.participantId)} не в игре`;
+      const p = r(action.participantId);
+      if (p.status !== "playing") return `${name(action.participantId)} не в игре`;
+      // Один аддон на игрока за турнир — обычный или двойной (RATING.md 7а, п. 11)
+      if (p.addons + p.doubleAddons > 0) return `${name(action.participantId)} уже брал(а) аддон`;
       if (!ctx.addonOpen && !ctx.force) return "Аддоны закрыты";
       return null;
     }

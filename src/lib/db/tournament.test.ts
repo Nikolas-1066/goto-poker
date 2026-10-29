@@ -162,6 +162,9 @@ describe("re-entry и аддоны", () => {
     expect(byName("Саша").addons).toBe(1);
     expect(byName("Ира").doubleAddons).toBe(1);
     expect(state.tournament).toMatchObject({ addons: 1, doubleAddons: 1 });
+    // второй аддон тому же игроку — нельзя, табло не меняется
+    expect(() => player({ type: "double_addon", participantId: byName("Саша").id })).toThrow("Саша уже брал(а) аддон");
+    expect(state.tournament).toMatchObject({ addons: 1, doubleAddons: 1 });
   });
 
   it("после закрытия аддонов — только с подтверждением", () => {

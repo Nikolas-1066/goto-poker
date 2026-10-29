@@ -245,6 +245,22 @@ describe("проверка действий админа", () => {
     expect(checkAction(j.events, { type: "addon", participantId: 1 }, open, name)).toBeNull();
   });
 
+  it("аддон — один на игрока за турнир: обычный или двойной, даже после re-entry", () => {
+    const j = game();
+    j.addon(1);
+    expect(checkAction(j.events, { type: "addon", participantId: 1 }, open, name)).toBe("Саша уже брал(а) аддон");
+    expect(checkAction(j.events, { type: "double_addon", participantId: 1 }, open, name)).toBe("Саша уже брал(а) аддон");
+    // и с подтверждением тоже нельзя — это правило, а не «закрыто по времени»
+    expect(checkAction(j.events, { type: "addon", participantId: 1 }, { ...open, force: true }, name)).toBe("Саша уже брал(а) аддон");
+    j.doubleAddon(2);
+    j.bust(2, 1);
+    j.reentry(2);
+    expect(checkAction(j.events, { type: "addon", participantId: 2 }, open, name)).toBe("Ира уже брал(а) аддон");
+    // отменённый аддон не считается
+    j.events.find((e) => e.participantId === 1 && e.type === "addon")!.cancelled = true;
+    expect(checkAction(j.events, { type: "double_addon", participantId: 1 }, open, name)).toBeNull();
+  });
+
   it("вылет: кто выбил — из оставшихся в игре, не сам себя, максимум двое", () => {
     const j = game();
     const bust = (busted: number[], knockers: number[]) =>

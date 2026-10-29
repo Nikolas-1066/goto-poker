@@ -290,7 +290,7 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
                 Вылет
               </Button>
             )}
-            {addonOpen && !finished && (
+            {addonOpen && !finished && p.addons + p.doubleAddons === 0 && (
               <>
                 <Button disabled={busy} onClick={() => act({ type: "addon", participantId: p.id })} title="Аддон">
                   +А
