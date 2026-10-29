@@ -27,6 +27,8 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
   const [busy, setBusy] = useState(false);
   /** Кого сейчас выбивают (открыт экран вылета) */
   const [bustOf, setBustOf] = useState<ParticipantView | null>(null);
+  /** Открыт экран дила (места оставшихся расставляются вручную) */
+  const [dealOpen, setDealOpen] = useState(false);
   /** Подсказка после действия с кнопкой «Отменить» (10 секунд) */
   const [toast, setToast] = useState<{ message: string; undoEventId: number | null } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -253,7 +255,20 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
 
       {error && <div className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>}
 
-      {registered.length > 0 && (
+      {finished && (
+        <Section title="Итоги турнира">
+          {participants
+            .filter((p) => p.status !== "registered")
+            .map((p) => (
+              <Row key={p.id} p={p} place />
+            ))}
+          <a href="/admin/history" className="block py-3 text-sm text-amber-300 hover:underline">
+            Открыть в истории — там можно исправить итоги →
+          </a>
+        </Section>
+      )}
+
+      {!finished && registered.length > 0 && (
         <Section title={`Записались · ${registered.length}`}>
           {registered.map((p) => (
             <Row key={p.id} p={p}>
@@ -270,41 +285,64 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
         </Section>
       )}
 
-      <Section title={`В игре · ${playing.length}`}>
-        {playing.length === 0 && <div className="py-3 text-sm text-slate-500">Пока никого. Найдите игрока выше и нажмите «Пришёл».</div>}
-        {playing.length === 1 && tournament.status !== "finished" && busted.length > 0 && (
-          <div className="py-2 text-sm text-amber-200">Можно завершать турнир — остался один игрок: {playing[0].name}</div>
-        )}
-        {playing.map((p) => (
-          <Row key={p.id} p={p}>
-            {!finished && playing.length > 1 && (
-              <Button
-                variant="danger"
-                disabled={busy}
-                onClick={() => {
-                  setBustOf(p);
-                  setError("");
-                  window.scrollTo({ top: (document.getElementById("players")?.offsetTop ?? 0) - 60, behavior: "smooth" });
-                }}
-              >
-                Вылет
+      {!finished && (
+        <Section title={`В игре · ${playing.length}`}>
+          {playing.length === 0 && <div className="py-3 text-sm text-slate-500">Пока никого. Найдите игрока выше и нажмите «Пришёл».</div>}
+          {!finished && playing.length === 1 && busted.length > 0 && (
+            <div className="py-2">
+              <Button variant="primary" className="w-full py-3" disabled={busy} onClick={() => act({ type: "finish" })}>
+                Завершить турнир — победитель {playing[0].name}
               </Button>
-            )}
-            {addonOpen && !finished && p.addons + p.doubleAddons === 0 && (
-              <>
-                <Button disabled={busy} onClick={() => act({ type: "addon", participantId: p.id })} title="Аддон">
-                  +А
+            </div>
+          )}
+          {!finished && playing.length > 1 && busted.length > 0 && !dealOpen && (
+            <div className="py-2 text-right">
+              <Button variant="ghost" disabled={busy} onClick={() => setDealOpen(true)}>
+                Завершить с дилом…
+              </Button>
+            </div>
+          )}
+          {!finished && dealOpen && playing.length > 1 && (
+            <DealPanel
+              playing={playing}
+              busy={busy}
+              onCancel={() => setDealOpen(false)}
+              onSubmit={async (dealOrder) => {
+                if (await act({ type: "finish", dealOrder })) setDealOpen(false);
+              }}
+            />
+          )}
+          {playing.map((p) => (
+            <Row key={p.id} p={p}>
+              {!finished && playing.length > 1 && (
+                <Button
+                  variant="danger"
+                  disabled={busy}
+                  onClick={() => {
+                    setBustOf(p);
+                    setError("");
+                    window.scrollTo({ top: (document.getElementById("players")?.offsetTop ?? 0) - 60, behavior: "smooth" });
+                  }}
+                >
+                  Вылет
                 </Button>
-                <Button disabled={busy} onClick={() => act({ type: "double_addon", participantId: p.id })} title="Двойной аддон">
-                  +2А
-                </Button>
-              </>
-            )}
-          </Row>
-        ))}
-      </Section>
+              )}
+              {addonOpen && !finished && p.addons + p.doubleAddons === 0 && (
+                <>
+                  <Button disabled={busy} onClick={() => act({ type: "addon", participantId: p.id })} title="Аддон">
+                    +А
+                  </Button>
+                  <Button disabled={busy} onClick={() => act({ type: "double_addon", participantId: p.id })} title="Двойной аддон">
+                    +2А
+                  </Button>
+                </>
+              )}
+            </Row>
+          ))}
+        </Section>
+      )}
 
-      {busted.length > 0 && (
+      {!finished && busted.length > 0 && (
         <Section title={`Вылетели · ${busted.length}`}>
           {busted.map((p) => (
             <Row key={p.id} p={p} place>
@@ -547,6 +585,55 @@ function BustPanel({
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/** Дил на финальном столе: администратор расставляет места оставшихся (сверху — 1 место). */
+function DealPanel({
+  playing,
+  busy,
+  onCancel,
+  onSubmit,
+}: {
+  playing: ParticipantView[];
+  busy: boolean;
+  onCancel: () => void;
+  onSubmit: (order: number[]) => void;
+}) {
+  const [order, setOrder] = useState(playing.map((p) => p.id));
+  const byId = new Map(playing.map((p) => [p.id, p]));
+  const up = (i: number) => {
+    if (i === 0) return;
+    const next = [...order];
+    [next[i - 1], next[i]] = [next[i], next[i - 1]];
+    setOrder(next);
+  };
+  return (
+    <div className="mt-2 space-y-2 rounded-xl border border-amber-300/30 bg-amber-300/[0.05] p-3">
+      <div className="text-xs font-bold uppercase tracking-[0.2em] text-amber-300">Дил — места оставшихся</div>
+      <div className="text-sm text-slate-400">Расставьте по договорённости: сверху — 1 место. Очки пойдут по этим местам.</div>
+      {order.map((id, i) => (
+        <div key={id} className="flex items-center gap-2">
+          <div className="w-7 text-center font-bold tabular-nums text-amber-200">{i + 1}</div>
+          <div className="min-w-0 flex-1 truncate font-semibold">{byId.get(id)?.name}</div>
+          {i > 0 && (
+            <Button variant="ghost" title="Выше" onClick={() => up(i)}>
+              ↑
+            </Button>
+          )}
+        </div>
+      ))}
+      <div className="grid grid-cols-2 gap-2 pt-1">
+        <Button onClick={onCancel}>Отмена</Button>
+        <Button
+          variant="primary"
+          disabled={busy}
+          onClick={() => window.confirm("Завершить турнир с этими местами?") && onSubmit(order)}
+        >
+          Завершить
+        </Button>
+      </div>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 // Всё вызывается внутри транзакции записи (WriteHook в store.ts) и правит счётчики табло в Db.
 
 import type { DatabaseSync } from "node:sqlite";
-import { boardView } from "../clock";
+import { applyAction, boardView } from "../clock";
 import { phoneTail } from "../players";
 import {
   checkAction,
@@ -14,6 +14,7 @@ import {
   type JournalEvent,
 } from "../results";
 import type { Db, Tournament, TournamentMode } from "../types";
+import { finalizeResults } from "./history";
 import { audit } from "./sqlite";
 
 export type ParticipantStatus = "registered" | "playing" | "busted";
@@ -57,6 +58,8 @@ export type PlayerAction =
   | { type: "bust"; busted: { participantId: number; handOrder: number }[]; knockers: number[] }
   /** Отменить действие; вылет в общей раздаче отменяется целиком */
   | { type: "cancel"; eventId: number }
+  /** Завершить турнир. Если в игре несколько (дил) — dealOrder: их порядок по местам */
+  | { type: "finish"; dealOrder?: number[] }
   | { type: "setMode"; mode: TournamentMode };
 
 /** Что вернуть админке после действия: сообщение для подсказки и что можно отменить */
@@ -112,7 +115,8 @@ export function loadJournal(db: DatabaseSync, tournamentId: number): JournalEven
 export function listParticipants(db: DatabaseSync, tournamentId: number, finished = false): ParticipantView[] {
   const rows = db
     .prepare(
-      `SELECT p.id, p.player_id, p.registered_at, p.arrived_at, p.table_no, pl.name, pl.phone
+      `SELECT p.id, p.player_id, p.registered_at, p.arrived_at, p.table_no, p.place AS saved_place,
+              p.place_to AS saved_place_to, p.ko AS saved_ko, pl.name, pl.phone
        FROM participants p JOIN players pl ON pl.id = p.player_id
        WHERE p.tournament_id = ?`,
     )
@@ -122,6 +126,9 @@ export function listParticipants(db: DatabaseSync, tournamentId: number, finishe
     registered_at: number;
     arrived_at: number | null;
     table_no: number | null;
+    saved_place: number | null;
+    saved_place_to: number | null;
+    saved_ko: number;
     name: string;
     phone: string;
   }[];
@@ -141,9 +148,10 @@ export function listParticipants(db: DatabaseSync, tournamentId: number, finishe
       reentries: x?.reentries ?? 0,
       addons: x?.addons ?? 0,
       doubleAddons: x?.doubleAddons ?? 0,
-      ko: x?.ko ?? 0,
-      place: x?.place ?? null,
-      placeTo: x?.placeTo ?? null,
+      // после завершения — сохранённые итоги (в них учтён дил и исправления)
+      ko: finished && r.saved_place != null ? r.saved_ko : (x?.ko ?? 0),
+      place: finished && r.saved_place != null ? r.saved_place : (x?.place ?? null),
+      placeTo: finished && r.saved_place != null ? r.saved_place_to : (x?.placeTo ?? null),
       registeredAt: r.registered_at,
       arrivedAt: r.arrived_at,
       tableNo: r.table_no,
@@ -152,6 +160,7 @@ export function listParticipants(db: DatabaseSync, tournamentId: number, finishe
     };
   });
   const rank = { playing: 0, registered: 1, busted: 2 } as const;
+  if (finished) return list.sort((a, b) => (a.place ?? 9999) - (b.place ?? 9999) || a.name.localeCompare(b.name, "ru"));
   return list.sort(
     (a, b) =>
       rank[a.status] - rank[b.status] ||
@@ -217,6 +226,10 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
     );
   let message = "";
   let undoEventId: number | null = null;
+
+  if (t.status === "finished" && action.type !== "setMode") {
+    throw new Error("Турнир завершён. Исправить итоги можно в «Истории»");
+  }
 
   switch (action.type) {
     case "register": {
@@ -327,6 +340,18 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
       audit(db, "tournament.cancel", { tournamentId: cur.id, eventIds: group.map((g) => g.id) }, now);
       break;
     }
+    case "finish": {
+      Object.assign(t, applyAction(t, { type: "finish" }, now, () => undefined));
+      finalizeResults(db, cur.id, action.dealOrder, now);
+      const winner = db
+        .prepare(
+          `SELECT pl.name FROM participants p JOIN players pl ON pl.id = p.player_id
+           WHERE p.tournament_id = ? AND p.place = 1`,
+        )
+        .get(cur.id) as { name: string } | undefined;
+      message = winner ? `Турнир завершён. Победитель — ${winner.name}` : "Турнир завершён";
+      break;
+    }
     case "setMode": {
       if (action.mode !== "manual" && action.mode !== "players") throw new Error("Неизвестный режим");
       t.mode = action.mode;
@@ -350,10 +375,13 @@ export function syncTournament(db: DatabaseSync, next: Db, now = Date.now()) {
   const t = next.tournament;
   const cur = currentTournament(db);
   const res = computeResults(loadJournal(db, cur.id), { finished: t.status === "finished" });
-  const upd = db.prepare("UPDATE participants SET status = ?, entries = ? WHERE id = ?");
-  for (const p of db.prepare("SELECT id FROM participants WHERE tournament_id = ?").all(cur.id) as { id: number }[]) {
-    const r = res.participants.get(p.id);
-    upd.run(r?.status ?? "registered", r?.entries ?? 0, p.id);
+  // у завершённого турнира статусы и итоги уже сохранены (finalizeResults) — их не трогаем
+  if (t.status !== "finished") {
+    const upd = db.prepare("UPDATE participants SET status = ?, entries = ? WHERE id = ?");
+    for (const p of db.prepare("SELECT id FROM participants WHERE tournament_id = ?").all(cur.id) as { id: number }[]) {
+      const r = res.participants.get(p.id);
+      upd.run(r?.status ?? "registered", r?.entries ?? 0, p.id);
+    }
   }
   if (t.mode === "players") Object.assign(t, res.counters);
   t.updatedAt = Math.max(now, t.updatedAt + 1);
@@ -368,7 +396,9 @@ export function resetParticipants(db: DatabaseSync, next: Db, now = Date.now()) 
   const n = (db.prepare("SELECT COUNT(*) AS n FROM events WHERE tournament_id = ?").get(cur.id) as { n: number }).n;
   if (n > 0) {
     db.prepare("DELETE FROM events WHERE tournament_id = ?").run(cur.id);
-    db.prepare("UPDATE participants SET status = 'registered', arrived_at = NULL, entries = 0, ko = 0 WHERE tournament_id = ?").run(cur.id);
+    db.prepare(
+      "UPDATE participants SET status = 'registered', arrived_at = NULL, entries = 0, ko = 0, place = NULL, place_to = NULL WHERE tournament_id = ?",
+    ).run(cur.id);
     audit(db, "tournament.reset", { tournamentId: cur.id, events: n }, now);
   }
   syncTournament(db, next, now);

@@ -10,8 +10,9 @@ import { Button, inputClass } from "./ui";
 // short — подпись на узком экране телефона, чтобы всё меню помещалось в одну строку
 const NAV = [
   { href: "/admin", label: "Управление", short: "Турнир" },
-  { href: "/admin/presets", label: "Структуры", short: "Структуры" },
+  { href: "/admin/presets", label: "Структуры", short: "Пресеты" },
   { href: "/admin/players", label: "Игроки", short: "Игроки" },
+  { href: "/admin/history", label: "История", short: "История" },
 ];
 
 export function AdminShell({ children }: { children: ReactNode }) {
@@ -35,7 +36,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-20 border-b border-white/10 bg-[#080e15]/95 backdrop-blur">
         <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-2 px-3 py-2 md:px-6 md:py-3">
           <div className="flex min-w-0 items-center gap-2 md:gap-6">
-            <Link href="/admin" className="flex shrink-0 items-center gap-2">
+            {/* на узком экране после входа логотип прячем — иначе меню не помещается */}
+            <Link href="/admin" className={`${admin ? "hidden sm:flex" : "flex"} shrink-0 items-center gap-2`}>
               <Image src={logo} alt="ГОТО ПОКЕР" className="h-8 w-auto md:h-9" priority />
               <span className="hidden font-black tracking-[0.13em] md:inline">
                 ГОТО <span className="text-amber-300">ПОКЕР</span>
@@ -66,7 +68,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
               target="_blank"
               rel="noreferrer"
               title="Табло"
-              className="rounded-lg px-2 py-1.5 text-sm text-slate-400 hover:text-slate-200 md:px-3"
+              className={`${admin ? "hidden sm:inline-block" : ""} rounded-lg px-2 py-1.5 text-sm text-slate-400 hover:text-slate-200 md:px-3`}
             >
               <span className="hidden sm:inline">Табло </span>↗
             </a>

@@ -1,7 +1,8 @@
 import type { NextRequest } from "next/server";
 import { applyAction } from "@/lib/clock";
 import { badRequest, isAdmin, unauthorized } from "@/lib/auth";
-import { archiveCurrentIfUsed, resetParticipants } from "@/lib/db/tournament";
+import { finalizeResults } from "@/lib/db/history";
+import { archiveCurrentIfUsed, currentTournament, resetParticipants } from "@/lib/db/tournament";
 import { updateDb, type WriteHook } from "@/lib/store";
 import type { TournamentAction } from "@/lib/types";
 
@@ -20,7 +21,15 @@ export async function POST(req: NextRequest) {
       ? (sqlite) => void archiveCurrentIfUsed(sqlite)
       : action?.type === "reset"
         ? (sqlite, next) => resetParticipants(sqlite, next)
-        : undefined;
+        : action?.type === "finish"
+          ? (sqlite, next) => {
+              // по игрокам — сохранить итоги (при диле — ошибка: места расставляются в карточке «Игроки»)
+              // (повторное «Завершить» уже завершённого — не трогает итоги, в т.ч. исправленные)
+              const cur = currentTournament(sqlite);
+              const was = sqlite.prepare("SELECT status FROM tournaments WHERE id = ?").get(cur.id) as { status: string };
+              if (next.tournament.mode === "players" && was.status !== "finished") finalizeResults(sqlite, cur.id);
+            }
+          : undefined;
   try {
     const tournament = await updateDb((db) => {
       db.tournament = applyAction(db.tournament, action, Date.now(), (id) =>
