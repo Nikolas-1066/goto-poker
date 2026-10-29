@@ -25,7 +25,8 @@ try {
         $lanIp = Get-LanIp
         if ($lanIp) { $env:LAN_URL = "http://${lanIp}:$port" }
         $env:NEXT_TELEMETRY_DISABLED = '1'
-        $p = Start-Process -FilePath $NodeExe -ArgumentList 'server.js' -WorkingDirectory $AppDir `
+        # --disable-warning: в Node 22 встроенный SQLite помечен «экспериментальным» — не пугаем журнал ошибок
+        $p = Start-Process -FilePath $NodeExe -ArgumentList '--disable-warning=ExperimentalWarning', 'server.js' -WorkingDirectory $AppDir `
             -WindowStyle Hidden -PassThru `
             -RedirectStandardOutput (Join-Path $LogDir 'server.log') `
             -RedirectStandardError (Join-Path $LogDir 'server-errors.log')
