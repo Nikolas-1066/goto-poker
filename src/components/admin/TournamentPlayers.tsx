@@ -4,13 +4,15 @@
 // Списки обновляются, когда меняется турнир (updatedAt) — значит, видно и действия с другого телефона.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ParticipantView, PlayerAction } from "@/lib/db/tournament";
+import type { ParticipantView, PlayerAction, finalInfo } from "@/lib/db/tournament";
 import { formatEloDelta } from "@/lib/rating/elo";
 import { formatPlace } from "@/lib/results";
 import { phoneTail, searchPlayers, type Player } from "@/lib/players";
 import { formatSeat, MAX_SEATS, MAX_TABLES } from "@/lib/seating";
 import type { Tournament } from "@/lib/types";
 import { Button, inputClass } from "./ui";
+
+type FinalInfo = ReturnType<typeof finalInfo>;
 
 type Props = {
   tournament: Tournament;
@@ -22,6 +24,8 @@ type Props = {
 
 export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged }: Props) {
   const [participants, setParticipants] = useState<ParticipantView[]>([]);
+  /** Финал ли это и по каким закрытым периодам можно сделать финал */
+  const [final, setFinal] = useState<FinalInfo | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [query, setQuery] = useState("");
   const [newPlayer, setNewPlayer] = useState<{ name: string; phone: string } | null>(null);
@@ -62,7 +66,10 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
   const loadParticipants = useCallback(async () => {
     const res = await fetch("/api/tournament/players", { cache: "no-store" });
     const data = await res.json();
-    if (res.ok) setParticipants(data.participants);
+    if (res.ok) {
+      setParticipants(data.participants);
+      setFinal(data.final ?? null);
+    }
     else setError(data.error ?? "Не удалось загрузить участников");
   }, []);
 
@@ -178,6 +185,16 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
         <Stat label="Re-entry" value={tournament.rebuys} />
         <Stat label="Аддоны" value={tournament.addons + tournament.doubleAddons} />
       </div>
+
+      {final && !finished && (
+        <FinalBlock
+          final={final}
+          canChange={tournament.status === "idle" && participants.every((p) => p.status === "registered")}
+          busy={busy}
+          onSet={(periodId) => act({ type: "setFinal", periodId })}
+          onRegisterAll={() => act({ type: "registerFinalists" })}
+        />
+      )}
 
       {/* Поиск и добавление */}
       {!finished && (
@@ -766,5 +783,62 @@ function UndoAddon({ p, busy, onCancel }: { p: ParticipantView; busy: boolean; o
     >
       ↺ {p.doubleAddons > 0 ? "2А" : "А"}
     </Button>
+  );
+}
+
+/**
+ * Тип турнира: обычный или финал закрытого периода. Менять можно до старта, пока никто не вошёл.
+ * В финал записываются только финалисты, re-entry нет, очки — с повышенным коэффициентом.
+ */
+function FinalBlock({
+  final,
+  canChange,
+  busy,
+  onSet,
+  onRegisterAll,
+}: {
+  final: FinalInfo;
+  canChange: boolean;
+  busy: boolean;
+  onSet: (periodId: number | null) => void;
+  onRegisterAll: () => void;
+}) {
+  if (!final.final && final.options.length === 0) return null;
+  return (
+    <div
+      className={`rounded-lg p-3 text-sm ${
+        final.final ? "border border-amber-300/40 bg-amber-300/[0.08] text-amber-100" : "bg-white/[0.03] text-slate-400"
+      }`}
+    >
+      {canChange ? (
+        <label className="block">
+          <span className="mb-1 block text-xs text-slate-400">Тип турнира</span>
+          <select
+            className={inputClass}
+            disabled={busy}
+            value={final.final?.periodId ?? ""}
+            onChange={(e) => onSet(e.target.value ? Number(e.target.value) : null)}
+          >
+            <option value="">Обычный турнир</option>
+            {final.final && <option value={final.final.periodId}>{final.final.label}</option>}
+            {final.options.map((o) => (
+              <option key={o.periodId} value={o.periodId}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        final.final && <div className="font-bold">{final.final.label}</div>
+      )}
+      {final.final && (
+        <div className="mt-2 space-y-1">
+          <div className="text-xs text-amber-200/80">Только финалисты · без re-entry · очки с коэффициентом финала</div>
+          <Button variant="ghost" className="-ml-3" disabled={busy} onClick={onRegisterAll}>
+            + Записать недостающих финалистов
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }

@@ -3,6 +3,7 @@ import { badRequest, isAdmin, unauthorized } from "@/lib/auth";
 import {
   applyPlayerAction,
   currentTournament,
+  finalInfo,
   listParticipants,
   NeedsForceError,
   type PlayerAction,
@@ -19,11 +20,12 @@ export async function GET(req: NextRequest) {
   try {
     if (!(await hasDatabase())) return badRequest(NO_DB);
     const { tournament } = await readDb();
-    const participants = await withDatabase((db) =>
-      listParticipants(db, currentTournament(db).id, tournament.status === "finished"),
-    );
+    const { participants, final } = await withDatabase((db) => ({
+      participants: listParticipants(db, currentTournament(db).id, tournament.status === "finished"),
+      final: finalInfo(db),
+    }));
     return Response.json(
-      { mode: tournament.mode, updatedAt: tournament.updatedAt, participants },
+      { mode: tournament.mode, updatedAt: tournament.updatedAt, participants, final },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (err) {

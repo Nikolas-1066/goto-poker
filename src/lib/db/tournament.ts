@@ -15,7 +15,9 @@ import {
   type JournalEvent,
 } from "../results";
 import type { Db, Tournament, TournamentMode } from "../types";
+import { KIND_LABEL, type TournamentKind } from "../rating/points";
 import { finalizeResults } from "./history";
+import { finalistsOf, getPeriod } from "./periods";
 import { audit } from "./sqlite";
 
 export type ParticipantStatus = "registered" | "playing" | "busted";
@@ -68,6 +70,13 @@ export type PlayerAction =
   | { type: "cancel"; eventId: number }
   /** Посадить за стол (1–3) и место (1–10); null — убрать. Без автобалансировки */
   | { type: "seat"; participantId: number; tableNo: number | null; seatNo: number | null }
+  /**
+   * Сделать турнир финалом закрытого периода (или обычным: periodId = null). Только до старта,
+   * пока никто не вошёл. Финалисты записываются автоматически; записать можно только их.
+   */
+  | { type: "setFinal"; periodId: number | null }
+  /** Записать финалистов, которых ещё нет в записи (например, добавили wildcard) */
+  | { type: "registerFinalists" }
   /** Завершить турнир. Если в игре несколько (дил) — dealOrder: их порядок по местам */
   | { type: "finish"; dealOrder?: number[] }
   | { type: "setMode"; mode: TournamentMode };
@@ -78,10 +87,12 @@ export type PlayerActionResult = { message: string; undoEventId: number | null }
 /** Ошибка, которую админ может обойти подтверждением («Регистрация закрыта. Всё равно?») */
 export class NeedsForceError extends Error {}
 
-type TournamentRowInfo = { id: number; kind: string };
+type TournamentRowInfo = { id: number; kind: string; final_of_period_id: number | null };
 
 export function currentTournament(db: DatabaseSync): TournamentRowInfo {
-  const row = db.prepare("SELECT id, kind FROM tournaments WHERE is_current = 1").get() as TournamentRowInfo | undefined;
+  const row = db.prepare("SELECT id, kind, final_of_period_id FROM tournaments WHERE is_current = 1").get() as
+    | TournamentRowInfo
+    | undefined;
   if (!row) throw new Error("Турнир не найден");
   return row;
 }
@@ -254,6 +265,7 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
     case "register": {
       const player = db.prepare("SELECT id FROM players WHERE id = ? AND archived_at IS NULL").get(action.playerId);
       if (!player) throw new Error("Игрок не найден");
+      onlyFinalists(db, cur, action.playerId);
       const exists = db.prepare("SELECT id FROM participants WHERE tournament_id = ? AND player_id = ?").get(cur.id, action.playerId);
       if (exists) throw new Error("Игрок уже записан на этот турнир");
       const pid = Number(
@@ -291,6 +303,7 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
         }
       }
       const p = participantOf(db, cur.id, participantId);
+      onlyFinalists(db, cur, p.player_id);
       fail(check({ type: "entry", participantId: p.id }, { reentryOpen: ctx.entryOpen }), true);
       undoEventId = addEvent(p.id, "entry");
       message = `${name(p.id)} в игре`;
@@ -391,6 +404,40 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
       message = winner ? `Турнир завершён. Победитель — ${winner.name}` : "Турнир завершён";
       break;
     }
+    case "setFinal": {
+      if (t.status !== "idle" || journal().some((e) => !e.cancelled)) {
+        throw new Error("Тип турнира меняется до старта, пока никто не вошёл");
+      }
+      if (action.periodId == null) {
+        db.prepare("UPDATE tournaments SET kind = 'regular', final_of_period_id = NULL WHERE id = ?").run(cur.id);
+        message = "Обычный турнир";
+        audit(db, "tournament.final", { tournamentId: cur.id, periodId: null }, now);
+        break;
+      }
+      const period = getPeriod(db, Number(action.periodId));
+      if (!period) throw new Error("Период не найден");
+      if (period.closedAt == null) throw new Error(`Период «${period.name}» ещё не закрыт — сначала закройте его в «Рейтинге»`);
+      const other = db.prepare("SELECT id FROM tournaments WHERE final_of_period_id = ? AND id <> ?").get(period.id, cur.id);
+      if (other) throw new Error(`Финал периода «${period.name}» уже создан`);
+      const finalists = new Set(finalistsOf(db, period).finalists.map((f) => f.playerId));
+      const strangers = (
+        db.prepare("SELECT p.id, p.player_id FROM participants p WHERE p.tournament_id = ?").all(cur.id) as { id: number; player_id: number }[]
+      ).filter((p) => !finalists.has(p.player_id));
+      if (strangers.length) throw new Error(`Это не финалисты — сначала уберите из записи: ${strangers.map((p) => name(p.id)).join(", ")}`);
+      const kind = `${period.kind}_final`;
+      db.prepare("UPDATE tournaments SET kind = ?, final_of_period_id = ? WHERE id = ?").run(kind, period.id, cur.id);
+      const added = registerMissing(db, cur.id, finalists, now);
+      message = `${KIND_LABEL[kind as TournamentKind]} «${period.name}»: записано финалистов — ${added}`;
+      audit(db, "tournament.final", { tournamentId: cur.id, periodId: period.id, kind }, now);
+      break;
+    }
+    case "registerFinalists": {
+      if (cur.final_of_period_id == null) throw new Error("Это не финальный турнир");
+      const period = getPeriod(db, cur.final_of_period_id)!;
+      const added = registerMissing(db, cur.id, new Set(finalistsOf(db, period).finalists.map((f) => f.playerId)), now);
+      message = added ? `Записано финалистов: ${added}` : "Все финалисты уже записаны";
+      break;
+    }
     case "setMode": {
       if (action.mode !== "manual" && action.mode !== "players") throw new Error("Неизвестный режим");
       t.mode = action.mode;
@@ -404,6 +451,56 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
 
   syncTournament(db, next, now);
   return { message, undoEventId };
+}
+
+/** Финал: записать и посадить можно только финалистов периода */
+function onlyFinalists(db: DatabaseSync, cur: TournamentRowInfo, playerId: number) {
+  if (cur.final_of_period_id == null) return;
+  const period = getPeriod(db, cur.final_of_period_id);
+  if (!period) return;
+  if (finalistsOf(db, period).finalists.some((f) => f.playerId === playerId)) return;
+  const who = (db.prepare("SELECT name FROM players WHERE id = ?").get(playerId) as { name: string } | undefined)?.name ?? "Игрок";
+  throw new Error(`${who} не в списке финалистов «${period.name}» (добавить можно как wildcard в «Рейтинг → Архив»)`);
+}
+
+/** Записать недостающих финалистов; возвращает, сколько добавлено */
+function registerMissing(db: DatabaseSync, tournamentId: number, finalists: Set<number>, now: number) {
+  const have = new Set(
+    (db.prepare("SELECT player_id FROM participants WHERE tournament_id = ?").all(tournamentId) as { player_id: number }[]).map((p) => p.player_id),
+  );
+  const ins = db.prepare("INSERT INTO participants (tournament_id, player_id, status, registered_at) VALUES (?, ?, 'registered', ?)");
+  let added = 0;
+  for (const id of finalists) {
+    if (have.has(id)) continue;
+    ins.run(tournamentId, id, now);
+    added += 1;
+  }
+  return added;
+}
+
+/** Тип текущего турнира и закрытые периоды, по которым можно сделать финал — для админки */
+export function finalInfo(db: DatabaseSync) {
+  const cur = currentTournament(db);
+  const period = cur.final_of_period_id != null ? getPeriod(db, cur.final_of_period_id) : null;
+  const taken = new Set(
+    (db.prepare("SELECT final_of_period_id AS p FROM tournaments WHERE final_of_period_id IS NOT NULL AND id <> ?").all(cur.id) as { p: number }[]).map(
+      (r) => r.p,
+    ),
+  );
+  const options = (
+    db.prepare("SELECT id, kind, name FROM periods WHERE closed_at IS NOT NULL ORDER BY closed_at DESC LIMIT 12").all() as {
+      id: number;
+      kind: "month" | "season" | "year";
+      name: string;
+    }[]
+  )
+    .filter((p) => !taken.has(p.id))
+    .map((p) => ({ periodId: p.id, label: `${KIND_LABEL[`${p.kind}_final` as TournamentKind]} «${p.name}»` }));
+  return {
+    kind: cur.kind as TournamentKind,
+    final: period ? { periodId: period.id, label: `${KIND_LABEL[cur.kind as TournamentKind]} «${period.name}»` } : null,
+    options,
+  };
 }
 
 /**
