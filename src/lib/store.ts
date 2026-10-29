@@ -40,12 +40,23 @@ async function load(): Promise<Db> {
   return store.db;
 }
 
-async function save(prev: Db, next: Db) {
+/**
+ * Дополнительная запись в другие таблицы (участники, журнал турнира) в той же транзакции,
+ * до записи Db. Может поправить `next` (например, счётчики табло). Ошибка — откат всего.
+ * В запасном режиме (JSON) не вызывается — проверяйте `hasDatabase()`, если без неё нельзя.
+ */
+export type WriteHook = (sqlite: DatabaseSync, next: Db) => void;
+
+async function save(prev: Db, next: Db, hook?: WriteHook) {
   if (store.sqlite) {
     const sqlite = store.sqlite;
-    transaction(sqlite, () => writeState(sqlite, prev, next));
+    transaction(sqlite, () => {
+      hook?.(sqlite, next);
+      writeState(sqlite, prev, next);
+    });
     if (finishedNow(prev, next)) safeBackup("finish");
   } else {
+    // В запасном режиме таблиц игроков нет — дополнительная запись пропускается
     await persistJson(next);
   }
 }
@@ -66,17 +77,23 @@ export async function readDb(): Promise<Db> {
 }
 
 /** Последовательно применить изменение и записать на диск. */
-export function updateDb<T>(fn: (db: Db) => T | Promise<T>): Promise<T> {
+export function updateDb<T>(fn: (db: Db) => T | Promise<T>, hook?: WriteHook): Promise<T> {
   const run = store.queue.then(async () => {
     const db = await load();
     const draft = structuredClone(db);
     const result = await fn(draft);
-    await save(db, draft);
+    await save(db, draft, hook);
     store.db = draft;
     return result;
   });
   store.queue = run.catch(() => {});
   return run;
+}
+
+/** Работает ли база SQLite (а не запасной режим на JSON) */
+export async function hasDatabase() {
+  await readDb();
+  return store.sqlite !== null;
 }
 
 /**

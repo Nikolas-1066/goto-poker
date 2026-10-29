@@ -60,6 +60,7 @@ export function emptyTournament(): Tournament {
     name: "Турнир",
     presetId: null,
     structure: null,
+    mode: "manual",
     status: "idle",
     stepIndex: 0,
     stepEndsAt: null,
@@ -169,6 +170,7 @@ export function applyAction(
         combination: t.combination,
         ticker: t.ticker,
         tickerOn: t.tickerOn,
+        mode: t.mode,
         presetId: p.id,
         structure: structuredClone(structure),
         remainingMs: stepMs(p.steps[0]),
@@ -211,11 +213,14 @@ export function applyAction(
       next = { ...t };
       if (typeof p.name === "string") next.name = p.name.slice(0, 80);
       if (typeof p.combination === "string") next.combination = p.combination.slice(0, 40);
-      if (p.entries !== undefined) next.entries = nonNeg(p.entries);
-      if (p.playersLeft !== undefined) next.playersLeft = nonNeg(p.playersLeft);
-      if (p.rebuys !== undefined) next.rebuys = nonNeg(p.rebuys);
-      if (p.addons !== undefined) next.addons = nonNeg(p.addons);
-      if (p.doubleAddons !== undefined) next.doubleAddons = nonNeg(p.doubleAddons);
+      // В режиме «по игрокам» счётчики считает сервер по участникам — ручные правки не принимаем
+      if (t.mode !== "players") {
+        if (p.entries !== undefined) next.entries = nonNeg(p.entries);
+        if (p.playersLeft !== undefined) next.playersLeft = nonNeg(p.playersLeft);
+        if (p.rebuys !== undefined) next.rebuys = nonNeg(p.rebuys);
+        if (p.addons !== undefined) next.addons = nonNeg(p.addons);
+        if (p.doubleAddons !== undefined) next.doubleAddons = nonNeg(p.doubleAddons);
+      }
       if (typeof p.ticker === "string") next.ticker = p.ticker.slice(0, 500);
       if (typeof p.tickerOn === "boolean") next.tickerOn = p.tickerOn;
       break;

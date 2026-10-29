@@ -7,14 +7,16 @@ export function Card({
   action,
   children,
   className = "",
+  id,
 }: {
   title?: ReactNode;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  id?: string;
 }) {
   return (
-    <section className={`rounded-2xl border border-white/[0.09] bg-[#101923]/90 p-5 ${className}`}>
+    <section id={id} className={`rounded-2xl border border-white/[0.09] bg-[#101923]/90 p-5 ${className}`}>
       {(title || action) && (
         <div className="mb-4 flex items-center justify-between gap-3">
           {title && (

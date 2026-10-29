@@ -111,6 +111,7 @@ type PresetRow = {
 
 type TournamentRow = {
   name: string;
+  mode: Tournament["mode"];
   preset_id: string | null;
   structure_json: string | null;
   status: Tournament["status"];
@@ -160,6 +161,7 @@ export function loadState(db: DatabaseSync): Db {
         name: row.name,
         presetId: row.preset_id,
         structure: row.structure_json ? withPresetDefaults(JSON.parse(row.structure_json)) : null,
+        mode: row.mode,
         status: row.status,
         stepIndex: row.step_index,
         stepEndsAt: row.step_ends_at,
@@ -228,6 +230,7 @@ export function writeState(db: DatabaseSync, prev: Db | null, next: Db) {
     name: t.name,
     preset_id: t.presetId,
     structure_json: t.structure ? JSON.stringify(t.structure) : null,
+    mode: t.mode === "players" ? "players" : "manual",
     status: t.status,
     step_index: t.stepIndex,
     step_ends_at: t.stepEndsAt,
@@ -244,7 +247,7 @@ export function writeState(db: DatabaseSync, prev: Db | null, next: Db) {
   const updated = db
     .prepare(`
       UPDATE tournaments SET
-        name = :name, preset_id = :preset_id, structure_json = :structure_json, status = :status,
+        name = :name, preset_id = :preset_id, structure_json = :structure_json, mode = :mode, status = :status,
         step_index = :step_index, step_ends_at = :step_ends_at, remaining_ms = :remaining_ms,
         elapsed_base_ms = :elapsed_base_ms, run_started_at = :run_started_at,
         entries = :entries, players_left = :players_left, rebuys = :rebuys, addons = :addons,
@@ -255,10 +258,10 @@ export function writeState(db: DatabaseSync, prev: Db | null, next: Db) {
     .run(values);
   if (updated.changes === 0) {
     db.prepare(`
-      INSERT INTO tournaments (name, preset_id, structure_json, status, step_index, step_ends_at, remaining_ms,
+      INSERT INTO tournaments (name, preset_id, structure_json, mode, status, step_index, step_ends_at, remaining_ms,
                                elapsed_base_ms, run_started_at, entries, players_left, rebuys, addons, double_addons,
                                is_current, created_at, updated_at, started_at, finished_at)
-      VALUES (:name, :preset_id, :structure_json, :status, :step_index, :step_ends_at, :remaining_ms,
+      VALUES (:name, :preset_id, :structure_json, :mode, :status, :step_index, :step_ends_at, :remaining_ms,
               :elapsed_base_ms, :run_started_at, :entries, :players_left, :rebuys, :addons, :double_addons,
               1, :updated_at, :updated_at,
               CASE WHEN :status = 'idle' THEN NULL ELSE :updated_at END,

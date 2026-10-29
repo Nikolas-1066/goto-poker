@@ -39,12 +39,18 @@ export type Preset = {
 
 export type TournamentStatus = "idle" | "running" | "paused" | "finished";
 
+/** Как считаются игроки: вручную счётчиками или по участникам (журнал входов и вылетов) */
+export type TournamentMode = "manual" | "players";
+
 export type Tournament = {
   name: string;
   /** Из какого пресета загружена структура (для информации) */
   presetId: string | null;
   /** Снимок структуры: правки пресета не ломают идущий турнир */
   structure: Omit<Preset, "updatedAt"> | null;
+
+  /** В режиме players счётчики ниже считает сервер по участникам — вручную их не меняют */
+  mode: TournamentMode;
 
   status: TournamentStatus;
   stepIndex: number;

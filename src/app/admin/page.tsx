@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { AdminShell } from "@/components/admin/AdminShell";
+import { TournamentPlayers } from "@/components/admin/TournamentPlayers";
 import { Button, Card, Counter, Field, inputClass } from "@/components/admin/ui";
 import { boardView, formatChips, formatClock, stepMs } from "@/lib/clock";
-import type { Preset, Tournament, TournamentAction } from "@/lib/types";
+import type { Preset, Tournament, TournamentAction, TournamentMode } from "@/lib/types";
 import { useTournament } from "@/lib/useTournament";
 
 export default function AdminPage() {
@@ -16,7 +17,7 @@ export default function AdminPage() {
 }
 
 function Control() {
-  const { tournament, now, online, send } = useTournament(1000);
+  const { tournament, now, online, send, refresh } = useTournament(1000);
   const [presets, setPresets] = useState<Preset[]>([]);
   const [error, setError] = useState("");
 
@@ -37,6 +38,25 @@ function Control() {
     }
   }
 
+  async function setMode(mode: TournamentMode) {
+    if (!tournament || mode === tournament.mode) return;
+    if (
+      mode === "players" &&
+      tournament.entries > 0 &&
+      !window.confirm("Перейти на учёт по игрокам? Счётчики табло будут считаться по участникам, ручные цифры заменятся.")
+    )
+      return;
+    setError("");
+    const res = await fetch("/api/tournament/players", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "setMode", mode }),
+    });
+    const data = await res.json();
+    if (!res.ok) setError(data.error ?? "Ошибка");
+    refresh();
+  }
+
   if (!tournament) return <div className="py-20 text-center text-slate-500">Загрузка…</div>;
 
   const view = boardView(tournament, now);
@@ -55,7 +75,12 @@ function Control() {
         onToggle={() =>
           act(status === "running" ? { type: "pause" } : status === "idle" ? { type: "start" } : { type: "resume" })
         }
-        onBust={() => act({ type: "update", patch: { playersLeft: tournament.playersLeft - 1 } })}
+        playersMode={tournament.mode === "players"}
+        onBust={() =>
+          tournament.mode === "players"
+            ? document.getElementById("players")?.scrollIntoView({ behavior: "smooth" })
+            : act({ type: "update", patch: { playersLeft: tournament.playersLeft - 1 } })
+        }
       />
       {(error || !online) && (
         <div className="rounded-lg border border-red-400/30 bg-red-500/10 px-4 py-2 text-sm text-red-300">
@@ -167,53 +192,70 @@ function Control() {
         </Card>
 
         {/* ИГРОКИ */}
-        <Card title="Игроки" action={<RebuyAddonBadges tournament={tournament} rebuyOpen={view.rebuyOpen} addonOpen={view.addonOpen} />}>
-          <Button
-            variant="primary"
-            className="mb-3 w-full py-3 text-base"
-            disabled={tournament.playersLeft === 0}
-            onClick={() => act({ type: "update", patch: { playersLeft: tournament.playersLeft - 1 } })}
-          >
-            ✕ Вылет игрока
-          </Button>
-          <Button
-            className="mb-5 w-full"
-            onClick={() =>
-              act({
-                type: "update",
-                patch: { entries: tournament.entries + 1, playersLeft: tournament.playersLeft + 1 },
-              })
-            }
-          >
-            + Новый игрок (вход и в игре +1)
-          </Button>
-          <div className="grid grid-cols-2 gap-4">
-            <Counter
-              label="В игре"
-              value={tournament.playersLeft}
-              onChange={(v) => act({ type: "update", patch: { playersLeft: v } })}
+        <Card
+          title="Игроки"
+          className="scroll-mt-16"
+          id="players"
+          action={<RebuyAddonBadges tournament={tournament} rebuyOpen={view.rebuyOpen} addonOpen={view.addonOpen} />}
+        >
+          <ModeSwitch mode={tournament.mode} onChange={setMode} />
+          {tournament.mode === "players" ? (
+            <TournamentPlayers
+              tournament={tournament}
+              rebuyOpen={view.rebuyOpen}
+              addonOpen={view.addonOpen}
+              onChanged={refresh}
             />
-            <Counter
-              label="Всего входов"
-              value={tournament.entries}
-              onChange={(v) => act({ type: "update", patch: { entries: v } })}
-            />
-            <Counter
-              label="Ребаи"
-              value={tournament.rebuys}
-              onChange={(v) => act({ type: "update", patch: { rebuys: v } })}
-            />
-            <Counter
-              label="Аддоны"
-              value={tournament.addons}
-              onChange={(v) => act({ type: "update", patch: { addons: v } })}
-            />
-            <Counter
-              label="Двойные аддоны"
-              value={tournament.doubleAddons}
-              onChange={(v) => act({ type: "update", patch: { doubleAddons: v } })}
-            />
-          </div>
+          ) : (
+            <>
+              <Button
+                variant="primary"
+                className="mb-3 w-full py-3 text-base"
+                disabled={tournament.playersLeft === 0}
+                onClick={() => act({ type: "update", patch: { playersLeft: tournament.playersLeft - 1 } })}
+              >
+                ✕ Вылет игрока
+              </Button>
+              <Button
+                className="mb-5 w-full"
+                onClick={() =>
+                  act({
+                    type: "update",
+                    patch: { entries: tournament.entries + 1, playersLeft: tournament.playersLeft + 1 },
+                  })
+                }
+              >
+                + Новый игрок (вход и в игре +1)
+              </Button>
+              <div className="grid grid-cols-2 gap-4">
+                <Counter
+                  label="В игре"
+                  value={tournament.playersLeft}
+                  onChange={(v) => act({ type: "update", patch: { playersLeft: v } })}
+                />
+                <Counter
+                  label="Всего входов"
+                  value={tournament.entries}
+                  onChange={(v) => act({ type: "update", patch: { entries: v } })}
+                />
+                <Counter
+                  label="Ребаи"
+                  value={tournament.rebuys}
+                  onChange={(v) => act({ type: "update", patch: { rebuys: v } })}
+                />
+                <Counter
+                  label="Аддоны"
+                  value={tournament.addons}
+                  onChange={(v) => act({ type: "update", patch: { addons: v } })}
+                />
+                <Counter
+                  label="Двойные аддоны"
+                  value={tournament.doubleAddons}
+                  onChange={(v) => act({ type: "update", patch: { doubleAddons: v } })}
+                />
+              </div>
+            </>
+          )}
           {tournament.structure && (
             <div className="mt-4 text-xs text-slate-500">
               Фишек в игре: {formatChips(view.totalChips)} · стартовый стек{" "}
@@ -278,7 +320,14 @@ function Control() {
               <Button
                 variant="danger"
                 disabled={!hasStructure}
-                onClick={() => act({ type: "reset" }, "Сбросить турнир к началу? Таймер и счётчики игроков обнулятся.")}
+                onClick={() =>
+                  act(
+                    { type: "reset" },
+                    tournament.mode === "players"
+                      ? "Сбросить турнир к началу? Таймер обнулится, все входы, аддоны и вылеты игроков удалятся (записавшиеся останутся в списке)."
+                      : "Сбросить турнир к началу? Таймер и счётчики игроков обнулятся.",
+                  )
+                }
               >
                 Сбросить турнир
               </Button>
@@ -490,6 +539,7 @@ function MobileBar({
   label,
   remainingMs,
   playersLeft,
+  playersMode,
   onToggle,
   onBust,
 }: {
@@ -498,6 +548,8 @@ function MobileBar({
   label: string;
   remainingMs: number;
   playersLeft: number;
+  /** Учёт по игрокам: кнопка ведёт к списку игроков вместо «−1 в игре» */
+  playersMode: boolean;
   onToggle: () => void;
   onBust: () => void;
 }) {
@@ -515,8 +567,8 @@ function MobileBar({
             {formatClock(remainingMs)}
           </div>
         </div>
-        <Button className="h-12 px-4" onClick={onBust} disabled={playersLeft === 0}>
-          ✕ Вылет
+        <Button className="h-12 px-4" onClick={onBust} disabled={!playersMode && playersLeft === 0}>
+          {playersMode ? "Игроки" : "✕ Вылет"}
           <span className="text-slate-500 tabular-nums">{playersLeft}</span>
         </Button>
         <Button variant="primary" className="h-12 w-28 text-base" onClick={onToggle}>
@@ -594,5 +646,28 @@ function TickerEditor({ value, onSave }: { value: string; onSave: (v: string) =>
         Сохранить текст
       </Button>
     </form>
+  );
+}
+
+function ModeSwitch({ mode, onChange }: { mode: TournamentMode; onChange: (m: TournamentMode) => void }) {
+  const opts: { value: TournamentMode; label: string }[] = [
+    { value: "players", label: "По игрокам" },
+    { value: "manual", label: "Вручную" },
+  ];
+  return (
+    <div className="mb-4 grid grid-cols-2 gap-1 rounded-lg bg-white/[0.04] p-1 text-sm">
+      {opts.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          onClick={() => onChange(o.value)}
+          className={`min-h-9 rounded-md px-3 py-1.5 ${
+            mode === o.value ? "bg-amber-300 font-bold text-[#080e15]" : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
   );
 }
