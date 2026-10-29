@@ -1,36 +1,35 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ГОТО ПОКЕР — табло турнира
 
-## Getting Started
+- `/` — табло для ТВ (таймер, блайнды, перерывы, игроки, средний стек)
+- `/admin` — управление турниром: старт/пауза, уровни, время, вылеты, ребаи/аддоны
+- `/admin/presets` — редактор структур блайндов (пресеты турниров)
 
-First, run the development server:
+Все данные хранятся на сервере в `data/goto-poker.json`, поэтому табло и
+админку можно открывать с любых устройств одновременно — они синхронизируются.
+При первом запуске создаются три пресета: «Стандарт», «Турбо», «Дипстек».
+
+## Локальный запуск
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Табло: http://localhost:3000, админка: http://localhost:3000/admin
+(пароль по умолчанию `goto`, задаётся через `ADMIN_PASSWORD`).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Запуск на ноутбуке в клубе (Windows) — без абонплаты
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+./deploy/build-windows.sh
+```
 
-## Learn More
+Соберёт `dist/GOTO-Poker-Windows.zip` (внутри уже есть Node.js). Архив копируется на ноутбук,
+там распаковывается и один раз запускается `INSTALL.bat` — появятся ярлыки
+«ГОТО ПОКЕР — запустить табло / выключить табло / админка». Инструкция для бара — `README-RU.txt`
+в архиве (исходник: `deploy/windows/README-RU.txt`).
 
-To learn more about Next.js, take a look at the following resources:
+## Запуск на сервере
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Пошаговая инструкция для Timeweb Cloud и телевизора — в [DEPLOY.md](DEPLOY.md).
+Коротко: `./deploy/setup.sh root@IP` один раз, дальше `./deploy/push.sh` после каждой правки.

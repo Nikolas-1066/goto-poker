@@ -24,3 +24,62 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ---------- Анимации табло ---------- */
+
+/* Последние 10 секунд: удар цифр каждую секунду */
+@keyframes tick-pulse {
+  0% { transform: scale(1.06); text-shadow: 0 0 60px rgb(239 68 68 / 0.7); }
+  100% { transform: scale(1); text-shadow: 0 0 0 rgb(239 68 68 / 0); }
+}
+.animate-tick { animation: tick-pulse 0.9s ease-out; }
+
+/* BLINDS UP — появление оверлея */
+@keyframes blinds-in {
+  0% { opacity: 0; }
+  8% { opacity: 1; }
+  88% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes blinds-flash {
+  0% { opacity: 0.9; }
+  100% { opacity: 0; }
+}
+@keyframes blinds-pop {
+  0% { transform: scale(0.6); opacity: 0; letter-spacing: 0.6em; }
+  60% { transform: scale(1.04); opacity: 1; }
+  100% { transform: scale(1); letter-spacing: 0.25em; }
+}
+@keyframes blinds-rise {
+  0% { transform: translateY(40px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+@keyframes shine {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.animate-blinds-in { animation: blinds-in 6s ease-in-out forwards; }
+.animate-blinds-flash { animation: blinds-flash 1.2s ease-out forwards; }
+.animate-blinds-pop { animation: blinds-pop 0.9s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+.animate-blinds-rise { animation: blinds-rise 0.7s ease-out 0.35s both; }
+.text-shine {
+  background: linear-gradient(100deg, #fcd34d 20%, #fff7d6 40%, #fcd34d 60%) 0 0 / 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shine 2.5s linear infinite;
+}
+
+/* Бегущая строка */
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-100%); }
+}
+.animate-marquee { animation: marquee linear infinite; }
+
+/* Медленное «дыхание» логотипа на экране перерыва */
+@keyframes breathe {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 30px rgb(252 211 77 / 0.15)); }
+  50% { transform: scale(1.025); filter: drop-shadow(0 0 60px rgb(252 211 77 / 0.3)); }
+}
+.animate-breathe { animation: breathe 6s ease-in-out infinite; }
