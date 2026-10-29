@@ -13,6 +13,7 @@ const NAV = [
   { href: "/admin/presets", label: "Структуры", short: "Пресеты" },
   { href: "/admin/players", label: "Игроки", short: "Игроки" },
   { href: "/admin/history", label: "История", short: "История" },
+  { href: "/admin/rating", label: "Рейтинг", short: "Рейтинг" },
 ];
 
 export function AdminShell({ children }: { children: ReactNode }) {
@@ -44,12 +45,12 @@ export function AdminShell({ children }: { children: ReactNode }) {
               </span>
             </Link>
             {admin && (
-              <nav className="flex min-w-0 gap-1 overflow-x-auto whitespace-nowrap [scrollbar-width:none]">
+              <nav className="flex min-w-0 gap-0 overflow-x-auto sm:gap-1 whitespace-nowrap [scrollbar-width:none]">
                 {NAV.map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`rounded-lg px-2 py-1.5 text-sm md:px-3 ${
+                    className={`rounded-lg px-1.5 py-1.5 text-[13px] sm:px-2 sm:text-sm md:px-3 ${
                       pathname === item.href
                         ? "bg-white/[0.08] text-white"
                         : "text-slate-400 hover:text-slate-200"
