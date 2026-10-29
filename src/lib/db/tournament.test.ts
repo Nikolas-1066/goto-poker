@@ -39,21 +39,19 @@ const clock = (action: TournamentAction, now: number) =>
   write((d) => {
     d.tournament = applyAction(d.tournament, action, now, (id) => d.presets.find((p) => p.id === id));
   });
-const player = (action: PlayerAction, now = T0) => write(() => {}, (sqlite, next) => applyPlayerAction(sqlite, next, action, now));
-const people = () => listParticipants(db, currentTournament(db).id);
-const byName = (name: string) => people().find((p) => p.name === name)!;
-/** Вылет — кнопка появится на шаге 1.4; здесь пишем событие напрямую */
-function bust(participantId: number, at: number) {
+let lastResult: ReturnType<typeof applyPlayerAction> | null = null;
+const player = (action: PlayerAction, now = T0) =>
   write(
     () => {},
     (sqlite, next) => {
-      sqlite
-        .prepare("INSERT INTO events (tournament_id, participant_id, type, at) VALUES (?, ?, 'bust', ?)")
-        .run(currentTournament(sqlite).id, participantId, at);
-      next.tournament.updatedAt = at;
+      lastResult = applyPlayerAction(sqlite, next, action, now);
     },
   );
-}
+const people = () => listParticipants(db, currentTournament(db).id);
+const byName = (name: string) => people().find((p) => p.name === name)!;
+/** Вылет одного игрока; knockers — кто выбил */
+const bust = (participantId: number, at: number, ...knockers: number[]) =>
+  player({ type: "bust", busted: [{ participantId, handOrder: 1 }], knockers }, at);
 
 let sasha: number;
 let ira: number;
@@ -255,5 +253,111 @@ describe("сброс и новый турнир", () => {
       (sqlite) => void archiveCurrentIfUsed(sqlite, T0 + 5000),
     );
     expect(currentTournament(db).id).toBe(id);
+  });
+});
+
+describe("вылет и нокауты", () => {
+  beforeEach(() => {
+    player({ type: "enter", playerId: sasha });
+    player({ type: "enter", playerId: ira });
+    player({ type: "enter", playerId: oleg });
+  });
+  const id = (name: string) => byName(name).id;
+
+  it("вылет с «кто выбил»: место, нокаут, счётчики табло и подсказка админу", () => {
+    bust(id("Ира"), T0 + 1000, id("Саша"));
+    expect(byName("Ира")).toMatchObject({ status: "busted", place: 3, knockedOutBy: ["Саша"] });
+    expect(byName("Саша").ko).toBe(1);
+    expect(state.tournament).toMatchObject({ playersLeft: 2, entries: 3 });
+    expect(lastResult).toEqual({ message: "Ира — 3 место, KO: Саша", undoEventId: byName("Ира").lastBustEventId });
+  });
+
+  it("делёж банка — по 0,5 нокаута двоим", () => {
+    bust(id("Ира"), T0 + 1000, id("Саша"), id("Олег"));
+    expect(byName("Саша").ko).toBe(0.5);
+    expect(byName("Олег").ko).toBe(0.5);
+    expect(lastResult!.message).toBe("Ира — 3 место, KO: Саша и Олег");
+  });
+
+  it("без нокаута", () => {
+    bust(id("Олег"), T0 + 1000);
+    expect(people().reduce((s, p) => s + p.ko, 0)).toBe(0);
+    expect(lastResult!.message).toBe("Олег — 3 место");
+  });
+
+  it("двое в одной раздаче: у кого стек больше — выше; равные стеки делят места", () => {
+    const dima = createPlayer(db, { name: "Дима", phone: "+79004445566" }).id;
+    player({ type: "enter", playerId: dima });
+    player({ type: "bust", busted: [{ participantId: id("Олег"), handOrder: 1 }, { participantId: id("Ира"), handOrder: 2 }], knockers: [id("Саша")] }, T0 + 1000);
+    expect([byName("Олег").place, byName("Ира").place]).toEqual([3, 4]);
+    expect(byName("Саша").ko).toBe(2);
+
+    // отменяем раздачу целиком и проводим её заново с равными стеками
+    player({ type: "cancel", eventId: byName("Олег").lastBustEventId! }, T0 + 2000);
+    expect(people().filter((p) => p.status === "busted")).toHaveLength(0);
+    player({ type: "bust", busted: [{ participantId: id("Олег"), handOrder: 1 }, { participantId: id("Ира"), handOrder: 1 }], knockers: [id("Саша")] }, T0 + 3000);
+    expect(byName("Олег")).toMatchObject({ place: 3, placeTo: 4 });
+    expect(lastResult!.message).toBe("Олег — 3–4 место, Ира — 3–4 место, KO: Саша");
+  });
+
+  it("ошибки вылета понятны и ничего не записывают", () => {
+    bust(id("Ира"), T0 + 1000, id("Саша"));
+    const before = structuredClone(state);
+    expect(() => bust(id("Олег"), T0 + 2000, id("Ира"))).toThrow("Ира не в игре");
+    expect(() => bust(id("Олег"), T0 + 2000, id("Олег"))).toThrow("Олег не может выбить сам себя");
+    expect(() => player({ type: "bust", busted: [{ participantId: id("Олег"), handOrder: 1 }, { participantId: id("Саша"), handOrder: 2 }], knockers: [] })).toThrow(
+      "Должен остаться хотя бы один игрок",
+    );
+    expect(loadState(db)).toEqual(before);
+  });
+});
+
+describe("отмена", () => {
+  beforeEach(() => {
+    player({ type: "enter", playerId: sasha });
+    player({ type: "enter", playerId: ira });
+  });
+
+  it("отмена вылета возвращает игрока в игру и убирает нокаут", () => {
+    bust(byName("Ира").id, T0 + 1000, byName("Саша").id);
+    player({ type: "cancel", eventId: byName("Ира").lastBustEventId! }, T0 + 2000);
+    expect(byName("Ира").status).toBe("playing");
+    expect(byName("Саша").ko).toBe(0);
+    expect(state.tournament.playersLeft).toBe(2);
+    expect(lastResult!.message).toBe("Отменено: вылет — Ира");
+  });
+
+  it("«Отменить» сразу после «Пришёл» — игрок снова только записан", () => {
+    player({ type: "enter", playerId: oleg }, T0 + 1000);
+    player({ type: "cancel", eventId: lastResult!.undoEventId! }, T0 + 2000);
+    expect(byName("Олег").status).toBe("registered");
+    expect(state.tournament.entries).toBe(2);
+  });
+
+  it("вылет, после которого был re-entry, отменить нельзя — сначала отменяется re-entry", () => {
+    // новый турнир на «Турбо»: re-entry до 6 уровня
+    write(
+      (d) => {
+        d.tournament = applyAction(d.tournament, { type: "loadPreset", presetId: d.presets[1].id }, T0, (x) =>
+          d.presets.find((p) => p.id === x),
+        );
+      },
+      (sqlite) => void archiveCurrentIfUsed(sqlite, T0),
+    );
+    player({ type: "enter", playerId: sasha });
+    player({ type: "enter", playerId: ira });
+    bust(byName("Ира").id, T0 + 1000, byName("Саша").id);
+    const bustId = byName("Ира").lastBustEventId!;
+    player({ type: "reentry", participantId: byName("Ира").id }, T0 + 2000);
+    expect(() => player({ type: "cancel", eventId: bustId }, T0 + 3000)).toThrow("Сначала отмените более поздние действия");
+  });
+
+  it("дважды отменить нельзя; отмена пишется в журнал действий", () => {
+    bust(byName("Ира").id, T0 + 1000);
+    const e = byName("Ира").lastBustEventId!;
+    player({ type: "cancel", eventId: e }, T0 + 2000);
+    expect(() => player({ type: "cancel", eventId: e }, T0 + 3000)).toThrow("уже отменено");
+    const log = db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'tournament.cancel'").get() as { n: number };
+    expect(log.n).toBe(1);
   });
 });

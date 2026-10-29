@@ -1,6 +1,13 @@
 import { connection, type NextRequest } from "next/server";
 import { badRequest, isAdmin, unauthorized } from "@/lib/auth";
-import { applyPlayerAction, currentTournament, listParticipants, NeedsForceError, type PlayerAction } from "@/lib/db/tournament";
+import {
+  applyPlayerAction,
+  currentTournament,
+  listParticipants,
+  NeedsForceError,
+  type PlayerAction,
+  type PlayerActionResult,
+} from "@/lib/db/tournament";
 import { hasDatabase, readDb, updateDb, withDatabase } from "@/lib/store";
 
 const NO_DB = "Учёт игроков недоступен: программа работает в запасном режиме (см. журнал сервера)";
@@ -31,11 +38,14 @@ export async function POST(req: NextRequest) {
   if (!action || typeof action !== "object") return badRequest("Некорректный запрос");
   try {
     if (!(await hasDatabase())) return badRequest(NO_DB);
+    let result: PlayerActionResult = { message: "", undoEventId: null };
     const tournament = await updateDb(
       (db) => db.tournament,
-      (sqlite, next) => applyPlayerAction(sqlite, next, action),
+      (sqlite, next) => {
+        result = applyPlayerAction(sqlite, next, action);
+      },
     );
-    return Response.json({ tournament, serverNow: Date.now() });
+    return Response.json({ tournament, serverNow: Date.now(), ...result });
   } catch (err) {
     if (err instanceof NeedsForceError) return Response.json({ error: err.message, needsForce: true }, { status: 409 });
     return badRequest(err instanceof Error ? err.message : "Ошибка");

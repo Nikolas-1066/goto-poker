@@ -88,7 +88,7 @@ function Control() {
         </div>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[1.4fr_1fr]">
         {/* ТАЙМЕР */}
         <Card
           title="Таймер"
@@ -265,7 +265,7 @@ function Control() {
         </Card>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[1.4fr_1fr]">
         {/* СТРУКТУРА ТЕКУЩЕГО ТУРНИРА */}
         <Card
           title={tournament.structure ? `Структура · ${tournament.structure.name}` : "Структура"}

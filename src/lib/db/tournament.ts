@@ -1,10 +1,18 @@
-// Участники текущего турнира: запись, «пришёл», re-entry, аддоны (вылеты — Этап 1.4).
+// Участники текущего турнира: запись, «пришёл», re-entry, аддоны, вылеты с нокаутами, отмена.
 // Всё вызывается внутри транзакции записи (WriteHook в store.ts) и правит счётчики табло в Db.
 
 import type { DatabaseSync } from "node:sqlite";
 import { boardView } from "../clock";
 import { phoneTail } from "../players";
-import { checkAction, computeResults, type CheckContext, type EventType, type JournalEvent } from "../results";
+import {
+  checkAction,
+  computeResults,
+  formatPlace,
+  knockerShares,
+  type CheckContext,
+  type EventType,
+  type JournalEvent,
+} from "../results";
 import type { Db, Tournament, TournamentMode } from "../types";
 import { audit } from "./sqlite";
 
@@ -27,6 +35,9 @@ export type ParticipantView = {
   registeredAt: number;
   arrivedAt: number | null;
   tableNo: number | null;
+  /** Событие последнего вылета (для отмены) и кто выбил */
+  lastBustEventId: number | null;
+  knockedOutBy: string[];
 };
 
 export type PlayerAction =
@@ -39,7 +50,17 @@ export type PlayerAction =
   | { type: "reentry"; participantId: number; force?: boolean }
   | { type: "addon"; participantId: number; force?: boolean }
   | { type: "double_addon"; participantId: number; force?: boolean }
+  /**
+   * Вылет. Один игрок или несколько в одной раздаче (handOrder: 1 — больший стек,
+   * одинаковый — равные стеки). knockers: никого (ушёл сам), один или двое (делёж банка, по 0,5).
+   */
+  | { type: "bust"; busted: { participantId: number; handOrder: number }[]; knockers: number[] }
+  /** Отменить действие; вылет в общей раздаче отменяется целиком */
+  | { type: "cancel"; eventId: number }
   | { type: "setMode"; mode: TournamentMode };
+
+/** Что вернуть админке после действия: сообщение для подсказки и что можно отменить */
+export type PlayerActionResult = { message: string; undoEventId: number | null };
 
 /** Ошибка, которую админ может обойти подтверждением («Регистрация закрыта. Всё равно?») */
 export class NeedsForceError extends Error {}
@@ -104,9 +125,12 @@ export function listParticipants(db: DatabaseSync, tournamentId: number, finishe
     name: string;
     phone: string;
   }[];
-  const res = computeResults(loadJournal(db, tournamentId), { finished });
+  const journal = loadJournal(db, tournamentId);
+  const res = computeResults(journal, { finished });
+  const names = new Map(rows.map((r) => [r.id, r.name]));
   const list = rows.map((r): ParticipantView => {
     const x = res.participants.get(r.id);
+    const bust = x?.lastBustId != null ? journal.find((e) => e.id === x.lastBustId) : undefined;
     return {
       id: r.id,
       playerId: r.player_id,
@@ -123,6 +147,8 @@ export function listParticipants(db: DatabaseSync, tournamentId: number, finishe
       registeredAt: r.registered_at,
       arrivedAt: r.arrived_at,
       tableNo: r.table_no,
+      lastBustEventId: x?.lastBustId ?? null,
+      knockedOutBy: (bust?.knockers ?? []).map((k) => names.get(k.participantId) ?? "?"),
     };
   });
   const rank = { playing: 0, registered: 1, busted: 2 } as const;
@@ -173,7 +199,7 @@ function fail(message: string | null, canForce: boolean) {
  * Выполнить действие с участником. Вызывать внутри транзакции записи (WriteHook):
  * пишет в participants/events и обновляет счётчики табло в `next`.
  */
-export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerAction, now = Date.now()) {
+export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerAction, now = Date.now()): PlayerActionResult {
   const t = next.tournament;
   const cur = currentTournament(db);
   const ctx = context(t, cur.kind, now, "force" in action ? action.force : false);
@@ -181,10 +207,16 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
   const journal = () => loadJournal(db, cur.id);
   const check = (a: Parameters<typeof checkAction>[1], c: Partial<CheckContext>) =>
     checkAction(journal(), a, { reentryOpen: true, addonOpen: true, isFinal: ctx.isFinal, force: ctx.force, ...c }, name);
-  const addEvent = (participantId: number, type: EventType) =>
-    db
-      .prepare("INSERT INTO events (tournament_id, participant_id, type, at, level_no) VALUES (?, ?, ?, ?, ?)")
-      .run(cur.id, participantId, type, now, ctx.levelNo);
+  const addEvent = (participantId: number, type: EventType, hand?: { id: number; order: number }) =>
+    Number(
+      db
+        .prepare(
+          "INSERT INTO events (tournament_id, participant_id, type, at, level_no, hand_id, hand_order) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .run(cur.id, participantId, type, now, ctx.levelNo, hand?.id ?? null, hand?.order ?? null).lastInsertRowid,
+    );
+  let message = "";
+  let undoEventId: number | null = null;
 
   switch (action.type) {
     case "register": {
@@ -192,17 +224,19 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
       if (!player) throw new Error("Игрок не найден");
       const exists = db.prepare("SELECT id FROM participants WHERE tournament_id = ? AND player_id = ?").get(cur.id, action.playerId);
       if (exists) throw new Error("Игрок уже записан на этот турнир");
-      db.prepare("INSERT INTO participants (tournament_id, player_id, status, registered_at) VALUES (?, ?, 'registered', ?)").run(
-        cur.id,
-        action.playerId,
-        now,
+      const pid = Number(
+        db
+          .prepare("INSERT INTO participants (tournament_id, player_id, status, registered_at) VALUES (?, ?, 'registered', ?)")
+          .run(cur.id, action.playerId, now).lastInsertRowid,
       );
+      message = `${name(pid)} записан(а)`;
       break;
     }
     case "unregister": {
       const p = participantOf(db, cur.id, action.participantId);
       const used = db.prepare("SELECT 1 FROM events WHERE participant_id = ? AND cancelled_at IS NULL LIMIT 1").get(p.id);
       if (used) throw new Error(`${name(p.id)} уже в турнире — убрать из записи нельзя`);
+      message = `${name(p.id)} убран(а) из записи`;
       db.prepare("DELETE FROM participants WHERE id = ?").run(p.id);
       break;
     }
@@ -226,7 +260,8 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
       }
       const p = participantOf(db, cur.id, participantId);
       fail(check({ type: "entry", participantId: p.id }, { reentryOpen: ctx.entryOpen }), true);
-      addEvent(p.id, "entry");
+      undoEventId = addEvent(p.id, "entry");
+      message = `${name(p.id)} в игре`;
       db.prepare("UPDATE participants SET arrived_at = COALESCE(arrived_at, ?) WHERE id = ?").run(now, p.id);
       db.prepare("UPDATE players SET first_visit_at = COALESCE(first_visit_at, ?) WHERE id = ?").run(now, p.player_id);
       break;
@@ -234,19 +269,68 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
     case "reentry": {
       const p = participantOf(db, cur.id, action.participantId);
       fail(check({ type: "reentry", participantId: p.id }, { reentryOpen: ctx.reentryOpen }), true);
-      addEvent(p.id, "reentry");
+      undoEventId = addEvent(p.id, "reentry");
+      message = `${name(p.id)} — re-entry`;
       break;
     }
     case "addon":
     case "double_addon": {
       const p = participantOf(db, cur.id, action.participantId);
       fail(check({ type: action.type, participantId: p.id }, { addonOpen: ctx.addonOpen }), true);
-      addEvent(p.id, action.type);
+      undoEventId = addEvent(p.id, action.type);
+      message = `${name(p.id)} — ${action.type === "addon" ? "аддон" : "двойной аддон"}`;
+      break;
+    }
+    case "bust": {
+      const busted = Array.isArray(action.busted) ? action.busted : [];
+      const knockers = Array.isArray(action.knockers) ? action.knockers.map(Number) : [];
+      for (const b of busted) participantOf(db, cur.id, b.participantId);
+      for (const k of knockers) participantOf(db, cur.id, k);
+      fail(check({ type: "bust", busted, knockers }, {}), false);
+      // несколько вылетевших в одной раздаче — общий номер раздачи
+      const hand =
+        busted.length > 1
+          ? ((db.prepare("SELECT MAX(hand_id) AS m FROM events WHERE tournament_id = ?").get(cur.id) as { m: number | null }).m ?? 0) + 1
+          : null;
+      const shares = knockerShares(knockers);
+      const ko = db.prepare("INSERT INTO knockouts (bust_event_id, knocker_participant_id, share) VALUES (?, ?, ?)");
+      for (const b of busted) {
+        const order = Math.max(1, Math.round(Number(b.handOrder) || 1));
+        const id = addEvent(b.participantId, "bust", hand != null ? { id: hand, order } : undefined);
+        for (const k of shares) ko.run(id, k.participantId, k.share);
+        undoEventId ??= id;
+      }
+      const res = computeResults(journal());
+      const who = busted.map((b) => `${name(b.participantId)} — ${formatPlace(res.participants.get(b.participantId)!)} место`);
+      message = `${who.join(", ")}${knockers.length ? `, KO: ${knockers.map(name).join(" и ")}` : ""}`;
+      break;
+    }
+    case "cancel": {
+      const e = db
+        .prepare("SELECT id, participant_id, type, hand_id FROM events WHERE id = ? AND tournament_id = ? AND cancelled_at IS NULL")
+        .get(action.eventId, cur.id) as { id: number; participant_id: number; type: EventType; hand_id: number | null } | undefined;
+      if (!e) throw new Error("Это действие уже отменено");
+      // вылет в общей раздаче отменяется вместе с остальными вылетевшими в ней
+      const group =
+        e.type === "bust" && e.hand_id != null
+          ? (db
+              .prepare("SELECT id FROM events WHERE tournament_id = ? AND hand_id = ? AND cancelled_at IS NULL ORDER BY id DESC")
+              .all(cur.id, e.hand_id) as { id: number }[])
+          : [{ id: e.id }];
+      const mark = db.prepare("UPDATE events SET cancelled_at = ? WHERE id = ?");
+      for (const g of group) {
+        fail(check({ type: "cancel", eventId: g.id }, {}), false);
+        mark.run(now, g.id);
+      }
+      const what = { entry: "вход", reentry: "re-entry", addon: "аддон", double_addon: "двойной аддон", bust: "вылет" }[e.type];
+      message = `Отменено: ${what} — ${name(e.participant_id)}${group.length > 1 ? ` и ещё ${group.length - 1}` : ""}`;
+      audit(db, "tournament.cancel", { tournamentId: cur.id, eventIds: group.map((g) => g.id) }, now);
       break;
     }
     case "setMode": {
       if (action.mode !== "manual" && action.mode !== "players") throw new Error("Неизвестный режим");
       t.mode = action.mode;
+      message = action.mode === "players" ? "Учёт по игрокам" : "Учёт вручную";
       audit(db, "tournament.mode", { tournamentId: cur.id, mode: action.mode }, now);
       break;
     }
@@ -255,6 +339,7 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
   }
 
   syncTournament(db, next, now);
+  return { message, undoEventId };
 }
 
 /**

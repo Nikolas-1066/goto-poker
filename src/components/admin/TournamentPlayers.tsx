@@ -1,9 +1,9 @@
 "use client";
 
-// Игроки текущего турнира: поиск/добавление, «Пришёл», re-entry, аддоны (вылеты — шаг 1.4).
+// Игроки текущего турнира: поиск/добавление, «Пришёл», re-entry, аддоны, вылет с «кто выбил», отмена.
 // Списки обновляются, когда меняется турнир (updatedAt) — значит, видно и действия с другого телефона.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ParticipantView, PlayerAction } from "@/lib/db/tournament";
 import { formatPlace } from "@/lib/results";
 import { phoneTail, searchPlayers, type Player } from "@/lib/players";
@@ -25,6 +25,17 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
   const [newPlayer, setNewPlayer] = useState<{ name: string; phone: string } | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  /** Кого сейчас выбивают (открыт экран вылета) */
+  const [bustOf, setBustOf] = useState<ParticipantView | null>(null);
+  /** Подсказка после действия с кнопкой «Отменить» (10 секунд) */
+  const [toast, setToast] = useState<{ message: string; undoEventId: number | null } | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function showToast(message: string, undoEventId: number | null) {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast(message ? { message, undoEventId } : null);
+    toastTimer.current = setTimeout(() => setToast(null), 10_000);
+  }
 
   const loadParticipants = useCallback(async () => {
     const res = await fetch("/api/tournament/players", { cache: "no-store" });
@@ -64,6 +75,7 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
         setError(data.error ?? "Ошибка");
         return false;
       }
+      showToast(data.message ?? "", action.type === "cancel" ? null : (data.undoEventId ?? null));
       onChanged();
       await loadParticipants();
       return true;
@@ -110,6 +122,34 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
 
   return (
     <div className="space-y-4">
+      {toast && (
+        <div className="fixed inset-x-3 bottom-24 z-40 mx-auto flex max-w-md items-center gap-3 rounded-xl border border-white/10 bg-[#16212d] px-4 py-3 shadow-2xl lg:bottom-6">
+          <div className="min-w-0 flex-1 text-sm">{toast.message}</div>
+          {toast.undoEventId != null && (
+            <Button
+              variant="ghost"
+              className="text-amber-300"
+              disabled={busy}
+              onClick={() => act({ type: "cancel", eventId: toast.undoEventId! })}
+            >
+              Отменить
+            </Button>
+          )}
+        </div>
+      )}
+
+      {bustOf && (
+        <BustPanel
+          first={bustOf}
+          playing={playing}
+          busy={busy}
+          onCancel={() => setBustOf(null)}
+          onSubmit={async (action) => {
+            if (await act(action)) setBustOf(null);
+          }}
+        />
+      )}
+
       <div className="grid grid-cols-4 gap-2 text-center">
         <Stat label="В игре" value={tournament.playersLeft} />
         <Stat label="Игроков" value={tournament.entries} />
@@ -232,8 +272,24 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
 
       <Section title={`В игре · ${playing.length}`}>
         {playing.length === 0 && <div className="py-3 text-sm text-slate-500">Пока никого. Найдите игрока выше и нажмите «Пришёл».</div>}
+        {playing.length === 1 && tournament.status !== "finished" && busted.length > 0 && (
+          <div className="py-2 text-sm text-amber-200">Можно завершать турнир — остался один игрок: {playing[0].name}</div>
+        )}
         {playing.map((p) => (
           <Row key={p.id} p={p}>
+            {!finished && playing.length > 1 && (
+              <Button
+                variant="danger"
+                disabled={busy}
+                onClick={() => {
+                  setBustOf(p);
+                  setError("");
+                  window.scrollTo({ top: (document.getElementById("players")?.offsetTop ?? 0) - 60, behavior: "smooth" });
+                }}
+              >
+                Вылет
+              </Button>
+            )}
             {addonOpen && !finished && (
               <>
                 <Button disabled={busy} onClick={() => act({ type: "addon", participantId: p.id })} title="Аддон">
@@ -252,6 +308,19 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
         <Section title={`Вылетели · ${busted.length}`}>
           {busted.map((p) => (
             <Row key={p.id} p={p} place>
+              {p.lastBustEventId != null && !finished && (
+                <Button
+                  variant="ghost"
+                  title="Отменить вылет"
+                  disabled={busy}
+                  onClick={() =>
+                    window.confirm(`Отменить вылет: ${p.name}? Игрок вернётся в игру.`) &&
+                    act({ type: "cancel", eventId: p.lastBustEventId! })
+                  }
+                >
+                  ↺
+                </Button>
+              )}
               {rebuyOpen && !finished && (
                 <Button disabled={busy} onClick={() => act({ type: "reentry", participantId: p.id })}>
                   Re-entry
@@ -297,6 +366,7 @@ function Row({ p, place, children }: { p: ParticipantView; place?: boolean; chil
     p.addons > 0 && `А ${p.addons}`,
     p.doubleAddons > 0 && `2А ${p.doubleAddons}`,
     p.ko > 0 && `KO ${String(p.ko).replace(".", ",")}`,
+    p.status === "busted" && p.knockedOutBy.length > 0 && `выбил ${p.knockedOutBy.join(" и ")}`,
   ].filter(Boolean);
   return (
     <div className="flex items-center gap-2 py-2">
@@ -309,6 +379,174 @@ function Row({ p, place, children }: { p: ParticipantView; place?: boolean; chil
         </div>
       </div>
       <div className="flex shrink-0 gap-1">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * Экран вылета: обычно два касания — «Вылет» у игрока → кто выбил.
+ * Дополнительно: делёж банка (двое по 0,5 KO), несколько вылетевших в одной раздаче, без нокаута.
+ */
+function BustPanel({
+  first,
+  playing,
+  busy,
+  onCancel,
+  onSubmit,
+}: {
+  first: ParticipantView;
+  playing: ParticipantView[];
+  busy: boolean;
+  onCancel: () => void;
+  onSubmit: (action: PlayerAction) => void;
+}) {
+  /** Вылетевшие в этой раздаче — по стеку перед раздачей, сверху больший */
+  const [busted, setBusted] = useState<number[]>([first.id]);
+  /** Кто из них с тем же стеком, что предыдущий (делят место) */
+  const [sameAsPrev, setSameAsPrev] = useState<Set<number>>(new Set());
+  const [split, setSplit] = useState(false);
+  const [picked, setPicked] = useState<number[]>([]);
+  const [addingBusted, setAddingBusted] = useState(false);
+
+  const byId = new Map(playing.map((p) => [p.id, p]));
+  const candidates = playing.filter((p) => !busted.includes(p.id));
+  const left = playing.length;
+  const from = left - busted.length + 1;
+  const placeText = busted.length === 1 ? `${left} место` : `места ${from}–${left}`;
+
+  function submit(knockers: number[]) {
+    let order = 1;
+    const list = busted.map((id, i) => {
+      if (i > 0 && !sameAsPrev.has(id)) order += 1;
+      return { participantId: id, handOrder: order };
+    });
+    onSubmit({ type: "bust", busted: list, knockers });
+  }
+
+  function moveUp(i: number) {
+    if (i === 0) return;
+    const next = [...busted];
+    [next[i - 1], next[i]] = [next[i], next[i - 1]];
+    setBusted(next);
+  }
+
+  return (
+    <div className="space-y-3 rounded-xl border border-red-400/30 bg-red-500/[0.06] p-3">
+      <div>
+        <div className="text-xs font-bold uppercase tracking-[0.2em] text-red-300">Вылет</div>
+        <div className="mt-1 text-lg font-bold">{busted.map((id) => byId.get(id)?.name).join(", ")}</div>
+        <div className="text-sm text-slate-400">Займёт {placeText}</div>
+      </div>
+
+      {busted.length > 1 && (
+        <div className="rounded-lg bg-black/20 p-2">
+          <div className="mb-1 text-xs text-slate-400">Порядок по стеку перед раздачей: сверху — больший</div>
+          {busted.map((id, i) => (
+            <div key={id} className="flex flex-wrap items-center gap-x-2 py-1">
+              <div className="min-w-0 flex-1 basis-32 truncate font-semibold">{byId.get(id)?.name}</div>
+              {i > 0 && (
+                <>
+                  <label className="flex items-center gap-1 text-xs text-slate-400">
+                    <input
+                      type="checkbox"
+                      checked={sameAsPrev.has(id)}
+                      onChange={(e) => {
+                        const next = new Set(sameAsPrev);
+                        if (e.target.checked) next.add(id);
+                        else next.delete(id);
+                        setSameAsPrev(next);
+                      }}
+                    />
+                    стек равный
+                  </label>
+                  <Button variant="ghost" title="Выше" onClick={() => moveUp(i)}>
+                    ↑
+                  </Button>
+                </>
+              )}
+              <Button
+                variant="ghost"
+                title="Убрать"
+                onClick={() => setBusted(busted.filter((x) => x !== id))}
+                disabled={busted.length === 1}
+              >
+                ✕
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {addingBusted ? (
+        <div>
+          <div className="mb-1 text-sm font-semibold">Кто ещё вылетел в этой раздаче?</div>
+          <div className="divide-y divide-white/[0.06]">
+            {candidates.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className="block w-full py-3 text-left font-semibold hover:bg-white/[0.03]"
+                onClick={() => {
+                  setBusted([...busted, p.id]);
+                  setAddingBusted(false);
+                }}
+              >
+                {p.name}
+              </button>
+            ))}
+          </div>
+          <Button className="mt-2 w-full" onClick={() => setAddingBusted(false)}>
+            Назад
+          </Button>
+        </div>
+      ) : (
+        <>
+          <div className="text-sm font-semibold">{split ? "Кто делил банк? Выберите двоих" : "Кто выбил?"}</div>
+          <div className="grid grid-cols-2 gap-2">
+            {candidates.map((p) => {
+              const on = picked.includes(p.id);
+              return (
+                <Button
+                  key={p.id}
+                  variant={on ? "primary" : "default"}
+                  className="justify-start py-3 text-left"
+                  disabled={busy}
+                  onClick={() => {
+                    if (!split) return submit([p.id]);
+                    setPicked(on ? picked.filter((x) => x !== p.id) : [...picked, p.id].slice(-2));
+                  }}
+                >
+                  <span className="truncate">{p.name}</span>
+                </Button>
+              );
+            })}
+          </div>
+          {split && (
+            <Button variant="primary" className="w-full" disabled={busy || picked.length !== 2} onClick={() => submit(picked)}>
+              Готово — по 0,5 нокаута
+            </Button>
+          )}
+          <div className="grid grid-cols-2 gap-2 border-t border-white/[0.07] pt-3 text-sm">
+            <Button
+              onClick={() => {
+                setSplit(!split);
+                setPicked([]);
+              }}
+            >
+              {split ? "Выбил один" : "Делили банк"}
+            </Button>
+            <Button disabled={candidates.length < 2} onClick={() => setAddingBusted(true)}>
+              + Ещё вылетел
+            </Button>
+            <Button disabled={busy} onClick={() => submit([])}>
+              Без нокаута
+            </Button>
+            <Button variant="ghost" onClick={onCancel}>
+              Отмена
+            </Button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
