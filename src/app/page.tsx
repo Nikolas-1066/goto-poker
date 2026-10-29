@@ -427,18 +427,19 @@ function MainBoard({
               className="mt-2 text-[clamp(5rem,10vw,10rem)] tracking-[-0.065em]"
             />
 
-            {/* CURRENT BLINDS */}
+            {/* CURRENT BLINDS — главное после таймера: крупно и в золотой рамке */}
             {level && (
-              <div
-                className={`mt-8 grid w-full gap-2 xl:mt-10 ${
-                  level.ante > 0 ? "grid-cols-3" : "grid-cols-2"
-                }`}
-              >
-                <Blind label="МАЛЫЙ БЛАЙНД" value={formatChips(level.sb)} />
+              <div className="mt-7 w-full rounded-2xl border border-amber-300/30 bg-amber-300/[0.07] px-3 pb-5 pt-3 shadow-[0_0_40px_rgba(252,211,77,0.08)] xl:mt-9 xl:px-4 xl:pb-6">
+                <div className="text-[10px] font-bold tracking-[0.35em] text-amber-300/80 xl:text-xs">
+                  ТЕКУЩИЕ БЛАЙНДЫ
+                </div>
+                <div className={`mt-2 grid w-full gap-2 ${level.ante > 0 ? "grid-cols-3" : "grid-cols-2"}`}>
+                  <Blind label="МАЛЫЙ БЛАЙНД" value={formatChips(level.sb)} />
 
-                <Blind label="БОЛЬШОЙ БЛАЙНД" value={formatChips(level.bb)} />
+                  <Blind label="БОЛЬШОЙ БЛАЙНД" value={formatChips(level.bb)} />
 
-                {level.ante > 0 && <Blind label="АНТЕ" value={formatChips(level.ante)} />}
+                  {level.ante > 0 && <Blind label="АНТЕ" value={formatChips(level.ante)} />}
+                </div>
               </div>
             )}
 
@@ -747,11 +748,16 @@ function Blind({
 }) {
   return (
     <div className="min-w-0 text-center">
-      <div className="flex min-h-8 items-center justify-center text-[8px] font-bold leading-4 tracking-[0.12em] text-slate-500 md:text-[9px] xl:text-[8px] 2xl:text-[10px]">
+      <div className="flex min-h-8 items-center justify-center text-[9px] font-bold leading-4 tracking-[0.12em] text-slate-400 md:text-[10px] 2xl:text-xs">
         {label}
       </div>
 
-      <div className="mt-2 whitespace-nowrap text-3xl font-black tabular-nums tracking-tight md:text-4xl xl:text-3xl 2xl:text-5xl">
+      {/* размер растёт с экраном; длинные числа (100 000) чуть мельче, чтобы влезли в колонку */}
+      <div
+        className={`mt-1 whitespace-nowrap font-black tabular-nums leading-none tracking-tight text-amber-200 ${
+          value.length > 6 ? "text-[clamp(1.9rem,2.9vw,3.6rem)]" : "text-[clamp(2.4rem,3.7vw,4.8rem)]"
+        }`}
+      >
         {value}
       </div>
     </div>

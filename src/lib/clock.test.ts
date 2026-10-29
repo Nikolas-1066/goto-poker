@@ -211,6 +211,26 @@ describe("сброс и завершение", () => {
   });
 });
 
+describe("ребаи и аддоны в идущем турнире", () => {
+  it("можно включить/поменять уровни, не перезагружая пресет; таймер не сбивается", () => {
+    const off = act(started(), { type: "setRules", rebuyUntilLevel: 0, addonUntilLevel: 0 }, T0 + MIN);
+    expect(boardView(off, T0 + MIN).rebuyOpen).toBe(false);
+    const on = act(off, { type: "setRules", rebuyUntilLevel: 3, addonUntilLevel: 4 }, T0 + 2 * MIN);
+    expect(on.structure).toMatchObject({ rebuyUntilLevel: 3, addonUntilLevel: 4 });
+    expect(boardView(on, T0 + 2 * MIN)).toMatchObject({ rebuyOpen: true, addonOpen: true });
+    expect(resolveClock(on, T0 + 2 * MIN).remainingMs).toBe(8 * MIN);
+    expect(preset.rebuyUntilLevel).toBe(2); // сам пресет не меняется
+  });
+
+  it("мусор вместо чисел — 0, без структуры — ошибка", () => {
+    const t = act(loaded(), { type: "setRules", rebuyUntilLevel: -5, addonUntilLevel: "x" as unknown as number }, T0);
+    expect(t.structure).toMatchObject({ rebuyUntilLevel: 0, addonUntilLevel: 0 });
+    expect(() => act(emptyTournament(), { type: "setRules", rebuyUntilLevel: 1, addonUntilLevel: 1 }, T0)).toThrow(
+      "Сначала загрузите структуру",
+    );
+  });
+});
+
 describe("изменение счётчиков и подписей", () => {
   it("отрицательные и дробные числа исправляются", () => {
     const t = act(loaded(), { type: "update", patch: { entries: -3, playersLeft: 7.6 } }, T0);

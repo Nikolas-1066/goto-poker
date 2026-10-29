@@ -322,6 +322,17 @@ function PresetForm({
           <Field label="Аддоны до конца уровня (0 — нет)">
             <NumInput value={draft.addonUntilLevel} onChange={(v) => set({ addonUntilLevel: v })} />
           </Field>
+          {(draft.rebuyUntilLevel === 0 || draft.addonUntilLevel === 0) && (
+            <div className="rounded-lg border border-amber-300/30 bg-amber-300/[0.07] px-3 py-2 col-span-2 text-xs text-amber-200">
+              {draft.rebuyUntilLevel === 0 && draft.addonUntilLevel === 0
+                ? "Ребаи и аддоны выключены (0)"
+                : draft.rebuyUntilLevel === 0
+                  ? "Ребаи выключены (0)"
+                  : "Аддоны выключены (0)"}
+              : в турнире «по игрокам» этих кнопок не будет. Укажите уровень, до конца которого они разрешены.
+              Уже загруженный турнир правка пресета не меняет — там это настраивается в карточке «Игроки».
+            </div>
+          )}
           <div className="col-span-2 self-end pb-2 text-xs text-slate-500">
             Включая перерыв сразу после этого уровня. Обычно аддон берут на перерыве, когда закрываются ребаи.
           </div>

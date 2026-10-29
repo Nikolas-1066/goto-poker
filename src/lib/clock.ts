@@ -208,6 +208,19 @@ export function applyAction(
       };
       break;
     }
+    case "setRules": {
+      if (!t.structure) throw new Error("Сначала загрузите структуру турнира");
+      const level = (v: unknown) => Math.min(200, nonNeg(Number(v)));
+      next = {
+        ...t,
+        structure: {
+          ...t.structure,
+          rebuyUntilLevel: level(action.rebuyUntilLevel),
+          addonUntilLevel: level(action.addonUntilLevel),
+        },
+      };
+      break;
+    }
     case "update": {
       const p = action.patch;
       next = { ...t };

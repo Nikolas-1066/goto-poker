@@ -99,6 +99,8 @@ export type TournamentAction =
   | { type: "loadPreset"; presetId: string }
   | { type: "reset" }
   | { type: "finish" }
+  /** Поменять у идущего турнира, до какого уровня открыты ребаи (re-entry) и аддоны; 0 — нет */
+  | { type: "setRules"; rebuyUntilLevel: number; addonUntilLevel: number }
   | {
       type: "update";
       patch: Partial<

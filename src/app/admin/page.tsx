@@ -199,6 +199,14 @@ function Control() {
           action={<RebuyAddonBadges tournament={tournament} rebuyOpen={view.rebuyOpen} addonOpen={view.addonOpen} />}
         >
           <ModeSwitch mode={tournament.mode} onChange={setMode} />
+          {tournament.structure && status !== "finished" && (
+            <RulesLine
+              key={`${tournament.structure.rebuyUntilLevel}-${tournament.structure.addonUntilLevel}`}
+              rebuyUntilLevel={tournament.structure.rebuyUntilLevel ?? 0}
+              addonUntilLevel={tournament.structure.addonUntilLevel ?? 0}
+              onSave={(rebuyUntilLevel, addonUntilLevel) => act({ type: "setRules", rebuyUntilLevel, addonUntilLevel })}
+            />
+          )}
           {tournament.mode === "players" ? (
             <TournamentPlayers
               tournament={tournament}
@@ -668,6 +676,75 @@ function ModeSwitch({ mode, onChange }: { mode: TournamentMode; onChange: (m: To
           {o.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+/**
+ * До какого уровня в этом турнире открыты ребаи (re-entry) и аддоны. Меняется прямо здесь:
+ * правка пресета в «Структурах» на уже загруженный турнир не влияет (у турнира своя копия).
+ */
+function RulesLine({
+  rebuyUntilLevel,
+  addonUntilLevel,
+  onSave,
+}: {
+  rebuyUntilLevel: number;
+  addonUntilLevel: number;
+  onSave: (rebuy: number, addon: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [rebuy, setRebuy] = useState(String(rebuyUntilLevel));
+  const [addon, setAddon] = useState(String(addonUntilLevel));
+  const off = rebuyUntilLevel === 0 && addonUntilLevel === 0;
+  const text = (n: number) => (n > 0 ? `до конца ${n} ур.` : "нет");
+
+  if (editing) {
+    return (
+      <div className="mb-4 space-y-2 rounded-lg border border-white/[0.08] bg-black/20 p-3">
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Ребаи (re-entry) до конца уровня">
+            <input className={inputClass} inputMode="numeric" value={rebuy} onChange={(e) => setRebuy(e.target.value.replace(/\D/g, ""))} />
+          </Field>
+          <Field label="Аддоны до конца уровня">
+            <input className={inputClass} inputMode="numeric" value={addon} onChange={(e) => setAddon(e.target.value.replace(/\D/g, ""))} />
+          </Field>
+        </div>
+        <div className="text-xs text-slate-500">0 — выключено. Перерыв после этого уровня тоже считается.</div>
+        <div className="grid grid-cols-2 gap-2">
+          <Button onClick={() => setEditing(false)}>Отмена</Button>
+          <Button
+            variant="primary"
+            onClick={() => {
+              onSave(Number(rebuy) || 0, Number(addon) || 0);
+              setEditing(false);
+            }}
+          >
+            Сохранить
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`mb-4 flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${
+        off ? "border border-amber-300/30 bg-amber-300/[0.07] text-amber-200" : "bg-white/[0.03] text-slate-400"
+      }`}
+    >
+      <div className="min-w-0 flex-1">
+        {off ? (
+          <>Ребаи и аддоны в этом турнире выключены — кнопок «Re-entry» и «+А» не будет.</>
+        ) : (
+          <>
+            Ребаи: {text(rebuyUntilLevel)} · Аддоны: {text(addonUntilLevel)}
+          </>
+        )}
+      </div>
+      <Button variant={off ? "primary" : "ghost"} onClick={() => setEditing(true)}>
+        {off ? "Включить" : "Изменить"}
+      </Button>
     </div>
   );
 }
