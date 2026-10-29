@@ -7,9 +7,11 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button, inputClass } from "./ui";
 
+// short — подпись на узком экране телефона, чтобы всё меню помещалось в одну строку
 const NAV = [
-  { href: "/admin", label: "Управление" },
-  { href: "/admin/presets", label: "Структуры" },
+  { href: "/admin", label: "Управление", short: "Турнир" },
+  { href: "/admin/presets", label: "Структуры", short: "Структуры" },
+  { href: "/admin/players", label: "Игроки", short: "Игроки" },
 ];
 
 export function AdminShell({ children }: { children: ReactNode }) {
@@ -34,24 +36,25 @@ export function AdminShell({ children }: { children: ReactNode }) {
         <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-2 px-3 py-2 md:px-6 md:py-3">
           <div className="flex min-w-0 items-center gap-2 md:gap-6">
             <Link href="/admin" className="flex shrink-0 items-center gap-2">
-              <Image src={logo} alt="ГОТО ПОКЕР" className="h-9 w-auto" priority />
+              <Image src={logo} alt="ГОТО ПОКЕР" className="h-8 w-auto md:h-9" priority />
               <span className="hidden font-black tracking-[0.13em] md:inline">
                 ГОТО <span className="text-amber-300">ПОКЕР</span>
               </span>
             </Link>
             {admin && (
-              <nav className="flex gap-1">
+              <nav className="flex min-w-0 gap-1 overflow-x-auto whitespace-nowrap [scrollbar-width:none]">
                 {NAV.map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`rounded-lg px-2.5 py-1.5 text-sm md:px-3 ${
+                    className={`rounded-lg px-2 py-1.5 text-sm md:px-3 ${
                       pathname === item.href
                         ? "bg-white/[0.08] text-white"
                         : "text-slate-400 hover:text-slate-200"
                     }`}
                   >
-                    {item.label}
+                    <span className="hidden sm:inline">{item.label}</span>
+                    <span className="sm:hidden">{item.short}</span>
                   </Link>
                 ))}
               </nav>
@@ -62,9 +65,10 @@ export function AdminShell({ children }: { children: ReactNode }) {
               href="/"
               target="_blank"
               rel="noreferrer"
+              title="Табло"
               className="rounded-lg px-2 py-1.5 text-sm text-slate-400 hover:text-slate-200 md:px-3"
             >
-              Табло ↗
+              <span className="hidden sm:inline">Табло </span>↗
             </a>
             {admin && (
               <Button variant="ghost" onClick={logout} title="Выйти" className="px-2 md:px-3">

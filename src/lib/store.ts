@@ -79,6 +79,21 @@ export function updateDb<T>(fn: (db: Db) => T | Promise<T>): Promise<T> {
   return run;
 }
 
+/**
+ * Работа с таблицами, которых нет в Db (игроки, участники, история) — в той же очереди,
+ * что и updateDb, чтобы записи не перемешивались. Всё внутри `fn` — одна транзакция.
+ */
+export function withDatabase<T>(fn: (db: DatabaseSync) => T): Promise<T> {
+  const run = store.queue.then(async () => {
+    await load();
+    const sqlite = store.sqlite;
+    if (!sqlite) throw new Error("База игроков недоступна: программа работает в запасном режиме (см. журнал сервера)");
+    return transaction(sqlite, () => fn(sqlite));
+  });
+  store.queue = run.catch(() => {});
+  return run;
+}
+
 // ---------- Запасной режим: старый JSON-файл ----------
 
 async function exists(file: string) {
