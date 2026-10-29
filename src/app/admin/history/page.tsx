@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Button, Card, inputClass } from "@/components/admin/ui";
 import type { HistoryItem, TournamentDetails } from "@/lib/db/history";
+import { formatEloDelta } from "@/lib/rating/elo";
 import { formatPlace } from "@/lib/results";
 
 export default function HistoryPage() {
@@ -259,6 +260,7 @@ function Details({ id, onBack }: { id: number; onBack: () => void }) {
                 <th className="hidden w-16 py-2 text-center sm:table-cell">Аддон</th>
                 <th className="w-12 py-2 text-center">KO</th>
                 <th className="w-14 py-2 text-right">Очки</th>
+                <th className="w-12 py-2 text-right sm:w-24">ELO</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.06]">
@@ -272,6 +274,16 @@ function Details({ id, onBack }: { id: number; onBack: () => void }) {
                   </td>
                   <td className="py-2 text-center tabular-nums">{r.ko ? num(r.ko) : "—"}</td>
                   <td className="py-2 text-right font-bold tabular-nums text-amber-200">{r.points ?? "—"}</td>
+                  <td className="py-2 text-right tabular-nums text-slate-400">
+                    {r.eloAfter != null ? (
+                      <>
+                        <span className="hidden sm:inline">{Math.round(r.eloAfter)} </span>
+                        <span className="text-xs">{formatEloDelta(r.eloBefore, r.eloAfter)}</span>
+                      </>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

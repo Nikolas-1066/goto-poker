@@ -99,7 +99,10 @@ function Players() {
                   <div className="truncate font-semibold">{p.name}</div>
                   {p.note && <div className="truncate text-xs text-slate-500">{p.note}</div>}
                 </div>
-                <div className="shrink-0 text-sm tabular-nums text-slate-400">{phoneTail(p.phone)}</div>
+                <div className="shrink-0 text-right text-sm tabular-nums text-slate-400">
+                  <div>{phoneTail(p.phone)}</div>
+                  <div className="text-xs text-slate-500">ELO {Math.round(p.elo)}</div>
+                </div>
               </button>
             ))}
           </div>

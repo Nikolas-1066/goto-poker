@@ -7,6 +7,7 @@ import { applyAction } from "../clock";
 import type { Db, TournamentAction } from "../types";
 import { DEFAULT_RULES } from "../rating/points";
 import { correctResults, finalizeResults, getTournamentDetails, listHistory, outdatedCount, rescoreAll, validatePlaces } from "./history";
+import { recomputeElo } from "./elo";
 import { saveRules } from "./rules";
 import { createPlayer } from "./players";
 import { openStore, transaction, writeState } from "./sqlite";
@@ -328,5 +329,70 @@ describe("очки рейтинга", () => {
     bust("Женя", "Саша", T0 + 2000);
     expect(rescoreAll(db)).toBe(0);
     expect(points().Женя).toBeNull();
+  });
+});
+
+describe("ELO", () => {
+  const playTo = (order: string[], at: number) => {
+    // order — места снизу вверх: первый вылетает первым
+    for (let i = 0; i < order.length - 1; i++) bust(order[i], order[order.length - 1], at + i * 100);
+    player({ type: "finish" }, at + 1000);
+  };
+  const elo = (name: string) =>
+    Math.round((db.prepare("SELECT elo FROM players WHERE name = ?").get(name) as { elo: number }).elo);
+  const games = (name: string) => (db.prepare("SELECT elo_games FROM players WHERE name = ?").get(name) as { elo_games: number }).elo_games;
+
+  it("после турнира: ELO до/после у участников и новое ELO игроков (новички — K 48)", () => {
+    playTo(["Женя", "Олег", "Ира", "Саша"], T0 + 2000);
+    // 4 игрока по 1000: 1-й (3 победы): 48 × 1,5 / 3 = +24; 2-й: +8; 3-й: −8; 4-й: −24
+    expect(["Саша", "Ира", "Олег", "Женя"].map(elo)).toEqual([1024, 1008, 992, 976]);
+    expect(games("Саша")).toBe(1);
+    const d = getTournamentDetails(db, tid())!;
+    expect(d.results.find((r) => r.name === "Саша")).toMatchObject({ eloBefore: 1000, eloAfter: 1024 });
+  });
+
+  it("исправили итоги — ELO пересчитан", () => {
+    playTo(["Женя", "Олег", "Ира", "Саша"], T0 + 2000);
+    const rows = getTournamentDetails(db, tid())!.results.map((r) => ({
+      ...r,
+      place: { Саша: 4, Ира: 3, Олег: 2, Женя: 1 }[r.name]!,
+      ko: 0,
+    }));
+    correctResults(db, tid(), rows);
+    expect(["Женя", "Саша"].map(elo)).toEqual([1024, 976]);
+  });
+
+  it("исправление старого турнира меняет ELO и в турнирах после него", () => {
+    playTo(["Женя", "Олег", "Ира", "Саша"], T0 + 2000);
+    const firstId = tid();
+    // второй турнир с теми же игроками
+    write(
+      (d) => {
+        d.tournament = applyAction(d.tournament, { type: "loadPreset", presetId: d.presets[0].id }, T0 + 10_000, (x) =>
+          d.presets.find((p) => p.id === x),
+        );
+      },
+      (sqlite) => void archiveCurrentIfUsed(sqlite, T0 + 10_000),
+    );
+    for (const id of [1, 2, 3, 4]) player({ type: "enter", playerId: id }, T0 + 11_000);
+    clock({ type: "start" }, T0 + 11_500);
+    playTo(["Женя", "Олег", "Ира", "Саша"], T0 + 12_000);
+    const secondBefore = getTournamentDetails(db, tid())!.results.find((r) => r.name === "Саша")!.eloBefore;
+    expect(secondBefore).toBe(1024);
+
+    const rows = getTournamentDetails(db, firstId)!.results.map((r) => ({ ...r, place: { Саша: 4, Ира: 3, Олег: 2, Женя: 1 }[r.name]!, ko: 0 }));
+    correctResults(db, firstId, rows);
+    expect(getTournamentDetails(db, tid())!.results.find((r) => r.name === "Саша")!.eloBefore).toBe(976);
+    expect(games("Саша")).toBe(2);
+  });
+
+  it("турнир снова открыли (кнопкой «след.» после завершения) — его ELO не учитывается", () => {
+    playTo(["Женя", "Олег", "Ира", "Саша"], T0 + 2000);
+    expect(elo("Саша")).toBe(1024);
+    // то, что делает route для next/prev/goto после завершения
+    db.prepare("UPDATE tournaments SET status = 'paused' WHERE id = ?").run(tid());
+    recomputeElo(db);
+    expect(elo("Саша")).toBe(1000);
+    expect(games("Саша")).toBe(0);
   });
 });

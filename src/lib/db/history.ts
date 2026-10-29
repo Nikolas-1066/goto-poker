@@ -5,6 +5,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { tournamentPoints, type TournamentKind } from "../rating/points";
 import { computeResults } from "../results";
+import { recomputeElo } from "./elo";
 import { currentRules, rulesById, type RulesVersion } from "./rules";
 import { audit } from "./sqlite";
 import { loadJournal } from "./tournament";
@@ -44,8 +45,14 @@ export function finalizeResults(db: DatabaseSync, tournamentId: number, dealOrde
     }
     upd.run(r.status, r.place, r.placeTo, r.entries, r.ko, id);
   }
-  db.prepare("UPDATE tournaments SET deal = ? WHERE id = ?").run(isDeal ? 1 : 0, tournamentId);
+  // статус «завершён» — сразу (запись часов идёт после), чтобы турнир попал в пересчёт ELO
+  db.prepare("UPDATE tournaments SET deal = ?, status = 'finished', finished_at = COALESCE(finished_at, ?) WHERE id = ?").run(
+    isDeal ? 1 : 0,
+    now,
+    tournamentId,
+  );
   scoreTournament(db, tournamentId, currentRules(db, now));
+  recomputeElo(db, now);
   audit(db, "tournament.finish", { tournamentId, players: res.fieldSize, deal: isDeal ? dealOrder : undefined }, now);
 }
 
@@ -123,6 +130,9 @@ export type ResultRow = {
   ko: number;
   /** Очки рейтинга; null — не посчитаны (турнир не завершён или место не выставлено) */
   points: number | null;
+  /** ELO до и после турнира */
+  eloBefore: number | null;
+  eloAfter: number | null;
 };
 
 export type TournamentDetails = HistoryItem & {
@@ -145,7 +155,7 @@ export function getTournamentDetails(db: DatabaseSync, id: number): TournamentDe
   const res = computeResults(loadJournal(db, id), { finished: item.status === "finished" });
   const rows = db
     .prepare(
-      `SELECT p.id, p.player_id, p.status, p.place, p.place_to, p.entries, p.ko, p.points, pl.name
+      `SELECT p.id, p.player_id, p.status, p.place, p.place_to, p.entries, p.ko, p.points, p.elo_before, p.elo_after, pl.name
        FROM participants p JOIN players pl ON pl.id = p.player_id
        WHERE p.tournament_id = ? AND p.status NOT IN ('registered', 'no_show')`,
     )
@@ -158,6 +168,8 @@ export function getTournamentDetails(db: DatabaseSync, id: number): TournamentDe
     entries: number;
     ko: number;
     points: number | null;
+    elo_before: number | null;
+    elo_after: number | null;
     name: string;
   }[];
   const finished = item.status === "finished";
@@ -176,6 +188,8 @@ export function getTournamentDetails(db: DatabaseSync, id: number): TournamentDe
         doubleAddons: x?.doubleAddons ?? 0,
         ko: finished ? r.ko : (x?.ko ?? 0),
         points: finished ? r.points : null,
+        eloBefore: r.elo_before,
+        eloAfter: r.elo_after,
       };
     })
     .sort((a, b) => (a.place ?? 9999) - (b.place ?? 9999) || a.name.localeCompare(b.name, "ru"));
@@ -266,6 +280,8 @@ export function correctResults(db: DatabaseSync, tournamentId: number, rows: unk
   // очки — по той же версии правил, по которой турнир уже был посчитан (правила задним числом не меняем)
   const own = db.prepare("SELECT rules_id FROM tournaments WHERE id = ?").get(tournamentId) as { rules_id: number | null };
   scoreTournament(db, tournamentId, (own.rules_id != null && rulesById(db, own.rules_id)) || currentRules(db, now));
+  // ELO этого турнира и всех после него
+  recomputeElo(db, now);
   return changes.length;
 }
 
@@ -322,6 +338,7 @@ export function rescoreAll(db: DatabaseSync, now = Date.now()) {
     )
     .all() as { id: number }[];
   for (const { id } of ids) scoreTournament(db, id, cur);
+  recomputeElo(db, now);
   audit(db, "rules.rescore", { rulesId: cur.id, tournaments: ids.length }, now);
   return ids.length;
 }

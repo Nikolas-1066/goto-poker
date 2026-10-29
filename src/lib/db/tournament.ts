@@ -43,8 +43,10 @@ export type ParticipantView = {
   knockedOutBy: string[];
   /** Аддон игрока — для отмены в любой момент */
   addonEventId: number | null;
-  /** Очки рейтинга (после завершения турнира) */
+  /** Очки рейтинга и ELO до/после (после завершения турнира) */
   points: number | null;
+  eloBefore: number | null;
+  eloAfter: number | null;
 };
 
 export type PlayerAction =
@@ -124,7 +126,7 @@ export function listParticipants(db: DatabaseSync, tournamentId: number, finishe
   const rows = db
     .prepare(
       `SELECT p.id, p.player_id, p.registered_at, p.arrived_at, p.table_no, p.seat_no, p.place AS saved_place,
-              p.place_to AS saved_place_to, p.ko AS saved_ko, p.points, pl.name, pl.phone
+              p.place_to AS saved_place_to, p.ko AS saved_ko, p.points, p.elo_before, p.elo_after, pl.name, pl.phone
        FROM participants p JOIN players pl ON pl.id = p.player_id
        WHERE p.tournament_id = ?`,
     )
@@ -139,6 +141,8 @@ export function listParticipants(db: DatabaseSync, tournamentId: number, finishe
     saved_place_to: number | null;
     saved_ko: number;
     points: number | null;
+    elo_before: number | null;
+    elo_after: number | null;
     name: string;
     phone: string;
   }[];
@@ -169,6 +173,8 @@ export function listParticipants(db: DatabaseSync, tournamentId: number, finishe
       lastBustEventId: x?.lastBustId ?? null,
       addonEventId: x?.addonEventId ?? null,
       points: finished ? r.points : null,
+      eloBefore: finished ? r.elo_before : null,
+      eloAfter: finished ? r.elo_after : null,
       knockedOutBy: (bust?.knockers ?? []).map((k) => names.get(k.participantId) ?? "?"),
     };
   });

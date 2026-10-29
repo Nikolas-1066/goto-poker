@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ParticipantView, PlayerAction } from "@/lib/db/tournament";
+import { formatEloDelta } from "@/lib/rating/elo";
 import { formatPlace } from "@/lib/results";
 import { phoneTail, searchPlayers, type Player } from "@/lib/players";
 import { formatSeat, MAX_SEATS, MAX_TABLES } from "@/lib/seating";
@@ -442,6 +443,7 @@ function Row({
     p.ko > 0 && `KO ${String(p.ko).replace(".", ",")}`,
     p.status === "busted" && p.knockedOutBy.length > 0 && `выбил ${p.knockedOutBy.join(" и ")}`,
     p.points != null && `${p.points} очк.`,
+    p.eloAfter != null && `ELO ${formatEloDelta(p.eloBefore, p.eloAfter)}`,
   ].filter(Boolean);
   const info = (
     <>
