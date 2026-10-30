@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Button, Card, Field, inputClass } from "@/components/admin/ui";
@@ -446,7 +447,11 @@ function StandingsTable({
           <Fragment key={r.playerId}>
             <tr className={`border-t border-white/[0.06] ${finalistIds?.has(r.playerId) ? "bg-amber-300/[0.05]" : ""}`}>
               <td className="py-2 tabular-nums text-slate-400">{r.rank}</td>
-              <td className="truncate py-2 font-semibold">{r.name}</td>
+              <td className="truncate py-2 font-semibold">
+                <Link href={`/admin/players/${r.playerId}`} className="hover:text-amber-200">
+                  {r.name}
+                </Link>
+              </td>
               <td className="py-2 text-right font-bold tabular-nums text-amber-200">{r.points}</td>
               <td className="py-2 text-center tabular-nums text-slate-400">{r.tournaments}</td>
               <td className="hidden py-2 text-center tabular-nums text-slate-400 sm:table-cell">{r.wins || "—"}</td>

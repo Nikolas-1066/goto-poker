@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Button, Card, inputClass } from "@/components/admin/ui";
@@ -267,7 +268,11 @@ function Details({ id, onBack }: { id: number; onBack: () => void }) {
               {t.results.map((r) => (
                 <tr key={r.participantId}>
                   <td className="py-2 font-bold tabular-nums text-amber-200">{formatPlace(r) || "—"}</td>
-                  <td className="py-2 font-semibold">{r.name}</td>
+                  <td className="py-2 font-semibold">
+                    <Link href={`/admin/players/${r.playerId}`} className="hover:text-amber-200">
+                      {r.name}
+                    </Link>
+                  </td>
                   <td className="py-2 text-center tabular-nums">{r.entries}</td>
                   <td className="hidden py-2 text-center text-slate-400 sm:table-cell">
                     {r.doubleAddons ? "двойной" : r.addons ? "да" : "—"}
