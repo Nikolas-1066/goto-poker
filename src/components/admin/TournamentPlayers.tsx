@@ -5,11 +5,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ParticipantView, PlayerAction, finalInfo } from "@/lib/db/tournament";
+import type { CashSummary, PayMethod } from "@/lib/cash";
 import { formatEloDelta } from "@/lib/rating/elo";
 import { formatPlace } from "@/lib/results";
 import { phoneTail, searchPlayers, type Player } from "@/lib/players";
 import { formatSeat, MAX_SEATS, MAX_TABLES } from "@/lib/seating";
 import type { Tournament } from "@/lib/types";
+import { CashLine, CashPanel, EnterButtons, PayBadge } from "./Cash";
 import { Button, inputClass } from "./ui";
 
 type FinalInfo = ReturnType<typeof finalInfo>;
@@ -37,6 +39,30 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
   const [dealOpen, setDealOpen] = useState(false);
   /** У кого открыт выбор стола и места */
   const [seatOf, setSeatOf] = useState<number | null>(null);
+  /** У кого открыто окно оплаты; итог кассы турнира */
+  const [cashOf, setCashOf] = useState<number | null>(null);
+  const [cashSummary, setCashSummary] = useState<CashSummary | null>(null);
+  /** Есть цена входа — показываем «Пришёл + оплатил» */
+  const withPay = (tournament.structure?.prices?.entry ?? 0) > 0;
+  const enter = (target: { participantId: number } | { playerId: number }, pay?: PayMethod) =>
+    act({ type: "enter", ...target, ...(pay ? { pay } : {}) });
+
+  /** Плашка оплаты и окно оплаты под строкой игрока */
+  const cashable = (p: ParticipantView) => ({
+    badge: <PayBadge cash={p.cash} open={cashOf === p.id} onClick={() => setCashOf(cashOf === p.id ? null : p.id)} />,
+    cashPanel:
+      cashOf === p.id ? (
+        <CashPanel
+          key={`${p.cash.debt}-${p.cash.payments.length}`}
+          name={p.name}
+          cash={p.cash}
+          busy={busy}
+          onPay={(amount, method) => act({ type: "pay", participantId: p.id, amount, method })}
+          onCancelPayment={(paymentId) => act({ type: "cancelPayment", paymentId })}
+          onSetFree={(eventId, free) => act({ type: "setFree", eventId, free })}
+        />
+      ) : null,
+  });
 
   /** Строка игрока с выбором стола по нажатию на имя */
   const seatable = (p: ParticipantView) => ({
@@ -69,6 +95,7 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
     if (res.ok) {
       setParticipants(data.participants);
       setFinal(data.final ?? null);
+      setCashSummary(data.cash ?? null);
     }
     else setError(data.error ?? "Не удалось загрузить участников");
   }, []);
@@ -186,6 +213,8 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
         <Stat label="Аддоны" value={tournament.addons + tournament.doubleAddons} />
       </div>
 
+      {cashSummary && <CashLine summary={cashSummary} />}
+
       {final && !finished && (
         <FinalBlock
           final={final}
@@ -232,13 +261,11 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
                             Записать
                           </Button>
                         )}
-                        <Button
-                          variant="primary"
-                          disabled={busy}
-                          onClick={async () => (await act({ type: "enter", playerId: pl.id })) && setQuery("")}
-                        >
-                          Пришёл
-                        </Button>
+                        <EnterButtons
+                          busy={busy}
+                          withPay={withPay}
+                          onEnter={async (pay) => (await enter({ playerId: pl.id }, pay)) && setQuery("")}
+                        />
                       </>
                     )}
                   </div>
@@ -297,7 +324,7 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
           {participants
             .filter((p) => p.status !== "registered")
             .map((p) => (
-              <Row key={p.id} p={p} place />
+              <Row key={p.id} p={p} place {...cashable(p)} />
             ))}
           <a href="/admin/history" className="block py-3 text-sm text-amber-300 hover:underline">
             Открыть в истории — там можно исправить итоги →
@@ -308,15 +335,11 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
       {!finished && registered.length > 0 && (
         <Section title={`Записались · ${registered.length}`}>
           {registered.map((p) => (
-            <Row key={p.id} p={p} {...(finished ? {} : seatable(p))}>
+            <Row key={p.id} p={p} {...seatable(p)} {...cashable(p)}>
               <Button variant="ghost" title="Убрать из записи" disabled={busy} onClick={() => act({ type: "unregister", participantId: p.id })}>
                 ✕
               </Button>
-              {!finished && (
-                <Button variant="primary" disabled={busy} onClick={() => act({ type: "enter", participantId: p.id })}>
-                  Пришёл
-                </Button>
-              )}
+              {!finished && <EnterButtons busy={busy} withPay={withPay} onEnter={(pay) => enter({ participantId: p.id }, pay)} />}
             </Row>
           ))}
         </Section>
@@ -350,7 +373,7 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
             />
           )}
           {playing.map((p) => (
-            <Row key={p.id} p={p} {...(finished ? {} : seatable(p))}>
+            <Row key={p.id} p={p} {...seatable(p)} {...cashable(p)}>
               {!finished && playing.length > 1 && (
                 <Button
                   variant="danger"
@@ -383,7 +406,7 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
       {!finished && busted.length > 0 && (
         <Section title={`Вылетели · ${busted.length}`}>
           {busted.map((p) => (
-            <Row key={p.id} p={p} place>
+            <Row key={p.id} p={p} place {...cashable(p)}>
               {!finished && p.addonEventId != null && <UndoAddon p={p} busy={busy} onCancel={(eventId) => act({ type: "cancel", eventId })} />}
               {p.lastBustEventId != null && !finished && (
                 <Button
@@ -443,6 +466,8 @@ function Row({
   children,
   onPick,
   seatEditor,
+  badge,
+  cashPanel,
 }: {
   p: ParticipantView;
   place?: boolean;
@@ -450,6 +475,9 @@ function Row({
   /** Нажатие на имя — открыть выбор стола */
   onPick?: () => void;
   seatEditor?: React.ReactNode;
+  /** Плашка оплаты под именем и окно оплаты */
+  badge?: React.ReactNode;
+  cashPanel?: React.ReactNode;
 }) {
   const seat = formatSeat(p.tableNo, p.seatNo);
   const details = [
@@ -476,16 +504,20 @@ function Row({
     <div className="py-2">
       <div className="flex items-center gap-2">
         {place && <div className="w-9 shrink-0 text-center font-bold tabular-nums text-slate-400">{formatPlace(p)}</div>}
-        {onPick ? (
-          <button type="button" className="min-w-0 flex-1 text-left" onClick={onPick} title="Стол и место">
-            {info}
-          </button>
-        ) : (
-          <div className="min-w-0 flex-1">{info}</div>
-        )}
-        <div className="flex shrink-0 gap-1">{children}</div>
+        <div className="min-w-0 flex-1">
+          {onPick ? (
+            <button type="button" className="block w-full min-w-0 text-left" onClick={onPick} title="Стол и место">
+              {info}
+            </button>
+          ) : (
+            info
+          )}
+          {badge}
+        </div>
+        <div className="flex shrink-0 flex-wrap justify-end gap-1">{children}</div>
       </div>
       {seatEditor}
+      {cashPanel}
     </div>
   );
 }

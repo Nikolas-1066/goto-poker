@@ -420,8 +420,24 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
         fail(check({ type: "cancel", eventId: g.id }, {}), false);
         mark.run(now, g.id);
       }
+      // отмена «Пришёл + оплатил» — снимается и оплата, принятая этим же нажатием
+      let refund = 0;
+      if (e.type === "entry") {
+        const ev = db.prepare("SELECT e.at, p.player_id FROM events e JOIN participants p ON p.id = e.participant_id WHERE e.id = ?").get(e.id) as {
+          at: number;
+          player_id: number;
+        };
+        const paid = db
+          .prepare("SELECT id, amount FROM payments WHERE tournament_id = ? AND player_id = ? AND at = ? AND cancelled_at IS NULL")
+          .all(cur.id, ev.player_id, ev.at) as { id: number; amount: number }[];
+        for (const x of paid) {
+          cancelPayment(db, cur.id, x.id, now);
+          refund += x.amount;
+        }
+      }
       const what = { entry: "вход", reentry: "re-entry", addon: "аддон", double_addon: "двойной аддон", bust: "вылет" }[e.type];
       message = `Отменено: ${what} — ${name(e.participant_id)}${group.length > 1 ? ` и ещё ${group.length - 1}` : ""}`;
+      if (refund > 0) message += ` (и оплата ${formatRub(refund)} — верните деньги)`;
       audit(db, "tournament.cancel", { tournamentId: cur.id, eventIds: group.map((g) => g.id) }, now);
       break;
     }

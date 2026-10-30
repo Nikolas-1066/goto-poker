@@ -502,10 +502,19 @@ describe("касса (docs/CASH.md)", () => {
     expect(cash("Ира")).toMatchObject({ paid: 1500, debt: 0, byMethod: { transfer: 1500 } });
   });
 
-  it("с оплатой убрать из записи нельзя", () => {
+  it("отмена «Пришёл + оплатил» снимает и вход, и эту оплату", () => {
     player({ type: "enter", playerId: oleg, pay: "cash" });
-    player({ type: "cancel", eventId: lastResult!.undoEventId! });
-    expect(cash("Олег").debt).toBe(-1500); // переплата: вход отменён, деньги приняты
+    player({ type: "cancel", eventId: lastResult!.undoEventId! }, T0 + 1000);
+    expect(lastResult!.message).toBe("Отменено: вход — Олег (и оплата 1 500 ₽ — верните деньги)");
+    expect(cash("Олег")).toMatchObject({ charged: 0, paid: 0, debt: 0 });
+  });
+
+  it("с оплатой убрать из записи нельзя; отменили вход после отдельной оплаты — переплата", () => {
+    player({ type: "enter", playerId: oleg });
+    const entry = lastResult!.undoEventId!;
+    player({ type: "pay", participantId: byName("Олег").id, amount: 1500, method: "cash" }, T0 + 1000);
+    player({ type: "cancel", eventId: entry }, T0 + 2000);
+    expect(cash("Олег").debt).toBe(-1500); // вход отменён, деньги приняты
     expect(() => player({ type: "unregister", participantId: byName("Олег").id })).toThrow("есть оплата");
   });
 
