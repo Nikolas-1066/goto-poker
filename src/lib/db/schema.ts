@@ -190,4 +190,22 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE presets ADD COLUMN prices_json TEXT NOT NULL DEFAULT '{}';
   `,
+  // 3 — касса (docs/CASH.md): цена каждого входа/аддона в момент нажатия, отметка «бесплатно»
+  // и оплаты игроков. Оплата относится к турниру, за который платят (долг с прошлого — к прошлому).
+  `
+  ALTER TABLE events ADD COLUMN price INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE events ADD COLUMN free INTEGER NOT NULL DEFAULT 0;
+
+  CREATE TABLE payments (
+    id            INTEGER PRIMARY KEY,
+    tournament_id INTEGER NOT NULL REFERENCES tournaments (id) ON DELETE CASCADE,
+    player_id     INTEGER NOT NULL REFERENCES players (id),
+    amount        INTEGER NOT NULL CHECK (amount > 0),
+    method        TEXT NOT NULL CHECK (method IN ('cash', 'card', 'transfer')),
+    at            INTEGER NOT NULL,
+    cancelled_at  INTEGER
+  );
+  CREATE INDEX payments_tournament ON payments (tournament_id);
+  CREATE INDEX payments_player ON payments (player_id);
+  `,
 ];

@@ -2,6 +2,16 @@
 // Всё вызывается внутри транзакции записи (WriteHook в store.ts) и правит счётчики табло в Db.
 
 import type { DatabaseSync } from "node:sqlite";
+import {
+  CHARGE_LABEL,
+  cashByPlayer,
+  formatRub,
+  PAY_METHOD_LABEL,
+  priceOf,
+  type ChargeType,
+  type PayMethod,
+  type PlayerCash,
+} from "../cash";
 import { applyAction, boardView } from "../clock";
 import { phoneTail } from "../players";
 import { MAX_SEATS, MAX_TABLES } from "../seating";
@@ -16,6 +26,7 @@ import {
 } from "../results";
 import type { Db, Tournament, TournamentMode } from "../types";
 import { KIND_LABEL, type TournamentKind } from "../rating/points";
+import { addPayment, cancelPayment, hasPayments, loadCharges, loadPayments, setEventFree } from "./cash";
 import { finalizeResults } from "./history";
 import { finalistsOf, getPeriod } from "./periods";
 import { audit } from "./sqlite";
@@ -49,6 +60,8 @@ export type ParticipantView = {
   points: number | null;
   eloBefore: number | null;
   eloAfter: number | null;
+  /** Касса игрока в этом турнире (docs/CASH.md) */
+  cash: PlayerCash;
 };
 
 export type PlayerAction =
@@ -57,7 +70,7 @@ export type PlayerAction =
   /** Убрать из записавшихся (только если ещё не входил) */
   | { type: "unregister"; participantId: number }
   /** «Пришёл» — первый вход. Можно сразу по игроку из базы, без предварительной записи */
-  | { type: "enter"; participantId?: number; playerId?: number; force?: boolean }
+  | { type: "enter"; participantId?: number; playerId?: number; force?: boolean; pay?: PayMethod }
   | { type: "reentry"; participantId: number; force?: boolean }
   | { type: "addon"; participantId: number; force?: boolean }
   | { type: "double_addon"; participantId: number; force?: boolean }
@@ -79,7 +92,16 @@ export type PlayerAction =
   | { type: "registerFinalists" }
   /** Завершить турнир. Если в игре несколько (дил) — dealOrder: их порядок по местам */
   | { type: "finish"; dealOrder?: number[] }
-  | { type: "setMode"; mode: TournamentMode };
+  | { type: "setMode"; mode: TournamentMode }
+  /** Касса: отметить вход / re-entry / аддон бесплатным или снять отметку */
+  | { type: "setFree"; eventId: number; free: boolean }
+  /** Касса: принять оплату (не больше долга игрока за этот турнир) */
+  | { type: "pay"; participantId: number; amount: number; method: PayMethod }
+  /** Касса: отменить ошибочную оплату */
+  | { type: "cancelPayment"; paymentId: number };
+
+/** Касса работает и после завершения турнира */
+const CASH_ACTIONS = new Set<PlayerAction["type"]>(["setFree", "pay", "cancelPayment"]);
 
 /** Что вернуть админке после действия: сообщение для подсказки и что можно отменить */
 export type PlayerActionResult = { message: string; undoEventId: number | null };
@@ -160,6 +182,7 @@ export function listParticipants(db: DatabaseSync, tournamentId: number, finishe
   const journal = loadJournal(db, tournamentId);
   const res = computeResults(journal, { finished });
   const names = new Map(rows.map((r) => [r.id, r.name]));
+  const cash = cashByPlayer(loadCharges(db, tournamentId), loadPayments(db, tournamentId));
   const list = rows.map((r): ParticipantView => {
     const x = res.participants.get(r.id);
     const bust = x?.lastBustId != null ? journal.find((e) => e.id === x.lastBustId) : undefined;
@@ -187,6 +210,15 @@ export function listParticipants(db: DatabaseSync, tournamentId: number, finishe
       eloBefore: finished ? r.elo_before : null,
       eloAfter: finished ? r.elo_after : null,
       knockedOutBy: (bust?.knockers ?? []).map((k) => names.get(k.participantId) ?? "?"),
+      cash: cash.get(r.player_id) ?? {
+        charged: 0,
+        free: 0,
+        paid: 0,
+        byMethod: { cash: 0, card: 0, transfer: 0 },
+        debt: 0,
+        charges: [],
+        payments: [],
+      },
     };
   });
   const rank = { playing: 0, registered: 1, busted: 2 } as const;
@@ -246,18 +278,30 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
   const journal = () => loadJournal(db, cur.id);
   const check = (a: Parameters<typeof checkAction>[1], c: Partial<CheckContext>) =>
     checkAction(journal(), a, { reentryOpen: true, addonOpen: true, isFinal: ctx.isFinal, force: ctx.force, ...c }, name);
+  // цена запоминается в момент действия: поменяли цены позже — начисленное не меняется
   const addEvent = (participantId: number, type: EventType, hand?: { id: number; order: number }) =>
     Number(
       db
         .prepare(
-          "INSERT INTO events (tournament_id, participant_id, type, at, level_no, hand_id, hand_order) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO events (tournament_id, participant_id, type, at, level_no, hand_id, hand_order, price) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
-        .run(cur.id, participantId, type, now, ctx.levelNo, hand?.id ?? null, hand?.order ?? null).lastInsertRowid,
+        .run(
+          cur.id,
+          participantId,
+          type,
+          now,
+          ctx.levelNo,
+          hand?.id ?? null,
+          hand?.order ?? null,
+          type === "bust" ? 0 : priceOf(t.structure?.prices, type as ChargeType),
+        ).lastInsertRowid,
     );
+  /** Долг игрока за этот турнир */
+  const debtOf = (playerId: number) => cashByPlayer(loadCharges(db, cur.id), loadPayments(db, cur.id)).get(playerId)?.debt ?? 0;
   let message = "";
   let undoEventId: number | null = null;
 
-  if (t.status === "finished" && action.type !== "setMode") {
+  if (t.status === "finished" && action.type !== "setMode" && !CASH_ACTIONS.has(action.type)) {
     throw new Error("Турнир завершён. Исправить итоги можно в «Истории»");
   }
 
@@ -280,6 +324,7 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
       const p = participantOf(db, cur.id, action.participantId);
       const used = db.prepare("SELECT 1 FROM events WHERE participant_id = ? AND cancelled_at IS NULL LIMIT 1").get(p.id);
       if (used) throw new Error(`${name(p.id)} уже в турнире — убрать из записи нельзя`);
+      if (hasPayments(db, cur.id, p.player_id)) throw new Error(`У ${name(p.id)} есть оплата — сначала отмените её`);
       message = `${name(p.id)} убран(а) из записи`;
       db.prepare("DELETE FROM participants WHERE id = ?").run(p.id);
       break;
@@ -307,6 +352,14 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
       fail(check({ type: "entry", participantId: p.id }, { reentryOpen: ctx.entryOpen }), true);
       undoEventId = addEvent(p.id, "entry");
       message = `${name(p.id)} в игре`;
+      // «Пришёл + оплатил» — сразу закрыть долг за турнир
+      if (action.pay) {
+        const debt = debtOf(p.player_id);
+        if (debt > 0) {
+          addPayment(db, { tournamentId: cur.id, playerId: p.player_id, amount: debt, method: action.pay }, now);
+          message += `, оплачено ${formatRub(debt)}`;
+        }
+      }
       db.prepare("UPDATE participants SET arrived_at = COALESCE(arrived_at, ?) WHERE id = ?").run(now, p.id);
       db.prepare("UPDATE players SET first_visit_at = COALESCE(first_visit_at, ?) WHERE id = ?").run(now, p.player_id);
       break;
@@ -443,6 +496,28 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
       t.mode = action.mode;
       message = action.mode === "players" ? "Учёт по игрокам" : "Учёт вручную";
       audit(db, "tournament.mode", { tournamentId: cur.id, mode: action.mode }, now);
+      break;
+    }
+    case "setFree": {
+      const e = setEventFree(db, cur.id, Number(action.eventId), !!action.free, now);
+      const who = db.prepare("SELECT participant_id FROM events WHERE id = ?").get(e.id) as { participant_id: number };
+      message = `${CHARGE_LABEL[e.type]} — ${name(who.participant_id)}: ${action.free ? "бесплатно" : "платно"}`;
+      break;
+    }
+    case "pay": {
+      const p = participantOf(db, cur.id, action.participantId);
+      const amount = Number(action.amount);
+      addPayment(db, { tournamentId: cur.id, playerId: p.player_id, amount, method: action.method }, now);
+      const left = debtOf(p.player_id);
+      message = `${name(p.id)}: принято ${formatRub(amount)} (${PAY_METHOD_LABEL[action.method].toLowerCase()})${
+        left > 0 ? `, осталось ${formatRub(left)}` : ""
+      }`;
+      break;
+    }
+    case "cancelPayment": {
+      const row = cancelPayment(db, cur.id, Number(action.paymentId), now);
+      const who = (db.prepare("SELECT name FROM players WHERE id = ?").get(row.player_id) as { name: string } | undefined)?.name ?? "Игрок";
+      message = `Оплата отменена: ${who}, ${formatRub(row.amount)}`;
       break;
     }
     default:

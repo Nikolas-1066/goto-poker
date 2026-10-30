@@ -1,5 +1,6 @@
 import { connection, type NextRequest } from "next/server";
 import { badRequest, isAdmin, unauthorized } from "@/lib/auth";
+import { tournamentCash } from "@/lib/db/cash";
 import {
   applyPlayerAction,
   currentTournament,
@@ -20,12 +21,16 @@ export async function GET(req: NextRequest) {
   try {
     if (!(await hasDatabase())) return badRequest(NO_DB);
     const { tournament } = await readDb();
-    const { participants, final } = await withDatabase((db) => ({
-      participants: listParticipants(db, currentTournament(db).id, tournament.status === "finished"),
-      final: finalInfo(db),
-    }));
+    const { participants, final, cash } = await withDatabase((db) => {
+      const id = currentTournament(db).id;
+      return {
+        participants: listParticipants(db, id, tournament.status === "finished"),
+        final: finalInfo(db),
+        cash: tournamentCash(db, id).summary,
+      };
+    });
     return Response.json(
-      { mode: tournament.mode, updatedAt: tournament.updatedAt, participants, final },
+      { mode: tournament.mode, updatedAt: tournament.updatedAt, participants, final, cash },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (err) {

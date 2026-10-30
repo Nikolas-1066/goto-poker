@@ -5,6 +5,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { applyAction } from "../clock";
 import type { Db, TournamentAction } from "../types";
+import { addPayment, playerDebts, tournamentCash } from "./cash";
 import { createPlayer } from "./players";
 import { loadState, openStore, transaction, writeState } from "./sqlite";
 import {
@@ -432,5 +433,125 @@ describe("рассадка", () => {
     expect(() => seat("Саша", 4, 1)).toThrow("Стол — от 1 до 3");
     expect(() => seat("Саша", 1, 11)).toThrow("Место — от 1 до 10");
     expect(() => seat("Саша", 0, 1)).toThrow("Стол — от 1 до 3");
+  });
+});
+
+describe("касса (docs/CASH.md)", () => {
+  const PRICES = { entry: 1500, reentry: 1000, addon: 1000, doubleAddon: 2000 };
+  const cash = (who: string) => byName(who).cash;
+  const tid = () => currentTournament(db).id;
+
+  beforeEach(() => {
+    clock({ type: "setPrices", prices: PRICES }, T0);
+  });
+
+  it("вход, re-entry и аддон начисляются по цене турнира", () => {
+    player({ type: "enter", playerId: sasha });
+    player({ type: "enter", playerId: ira });
+    bust(byName("Саша").id, T0 + 1000);
+    player({ type: "reentry", participantId: byName("Саша").id }, T0 + 2000);
+    clock({ type: "goto", index: 9 }, T0 + 3000);
+    player({ type: "double_addon", participantId: byName("Саша").id }, T0 + 4000);
+    expect(cash("Саша")).toMatchObject({ charged: 4500, paid: 0, debt: 4500 });
+    expect(cash("Саша").charges.map((c) => [c.type, c.price])).toEqual([
+      ["entry", 1500],
+      ["reentry", 1000],
+      ["double_addon", 2000],
+    ]);
+  });
+
+  it("цена запоминается в момент действия: правка цен не меняет начисленное", () => {
+    player({ type: "enter", playerId: sasha });
+    clock({ type: "setPrices", prices: { ...PRICES, entry: 1200 } }, T0 + 1000);
+    player({ type: "enter", playerId: ira }, T0 + 2000);
+    expect([cash("Саша").charged, cash("Ира").charged]).toEqual([1500, 1200]);
+  });
+
+  it("отменили вход — начисление снято", () => {
+    player({ type: "enter", playerId: sasha });
+    player({ type: "cancel", eventId: lastResult!.undoEventId! });
+    expect(cash("Саша")).toMatchObject({ charged: 0, debt: 0 });
+  });
+
+  it("оплата частями, остаток, отмена ошибочной оплаты", () => {
+    player({ type: "enter", playerId: sasha });
+    const id = byName("Саша").id;
+    player({ type: "pay", participantId: id, amount: 1000, method: "cash" });
+    expect(lastResult!.message).toBe("Саша: принято 1 000 ₽ (наличные), осталось 500 ₽");
+    player({ type: "pay", participantId: id, amount: 500, method: "card" });
+    expect(cash("Саша")).toMatchObject({ paid: 1500, debt: 0, byMethod: { cash: 1000, card: 500, transfer: 0 } });
+    expect(() => player({ type: "pay", participantId: id, amount: 100, method: "cash" })).toThrow("Долга нет");
+
+    player({ type: "cancelPayment", paymentId: cash("Саша").payments[1].id });
+    expect(cash("Саша")).toMatchObject({ paid: 1000, debt: 500 });
+    expect(() => player({ type: "pay", participantId: id, amount: 600, method: "transfer" })).toThrow("Больше, чем долг: 500 ₽");
+  });
+
+  it("«Бесплатно» на конкретном действии и снятие отметки", () => {
+    player({ type: "enter", playerId: sasha });
+    const entry = cash("Саша").charges[0].eventId;
+    player({ type: "setFree", eventId: entry, free: true });
+    expect(cash("Саша")).toMatchObject({ charged: 0, free: 1500, debt: 0 });
+    player({ type: "setFree", eventId: entry, free: false });
+    expect(cash("Саша")).toMatchObject({ charged: 1500, free: 0 });
+  });
+
+  it("«Пришёл + оплатил» — вход и оплата одним нажатием", () => {
+    player({ type: "enter", playerId: ira, pay: "transfer" });
+    expect(lastResult!.message).toBe("Ира в игре, оплачено 1 500 ₽");
+    expect(cash("Ира")).toMatchObject({ paid: 1500, debt: 0, byMethod: { transfer: 1500 } });
+  });
+
+  it("с оплатой убрать из записи нельзя", () => {
+    player({ type: "enter", playerId: oleg, pay: "cash" });
+    player({ type: "cancel", eventId: lastResult!.undoEventId! });
+    expect(cash("Олег").debt).toBe(-1500); // переплата: вход отменён, деньги приняты
+    expect(() => player({ type: "unregister", participantId: byName("Олег").id })).toThrow("есть оплата");
+  });
+
+  it("после завершения турнира принять оплату можно, остальное — нет", () => {
+    player({ type: "enter", playerId: sasha });
+    player({ type: "enter", playerId: ira });
+    clock({ type: "start" }, T0 + 1000);
+    bust(byName("Ира").id, T0 + 2000, byName("Саша").id);
+    clock({ type: "finish" }, T0 + 3000);
+    expect(state.tournament.status).toBe("finished");
+    player({ type: "pay", participantId: byName("Ира").id, amount: 1500, method: "cash" }, T0 + 4000);
+    expect(cash("Ира").debt).toBe(0);
+    expect(() => player({ type: "enter", playerId: oleg }, T0 + 5000)).toThrow("Турнир завершён");
+  });
+
+  it("без цен (старые турниры) ничего не начисляется", () => {
+    clock({ type: "setPrices", prices: { entry: 0, reentry: 0, addon: 0, doubleAddon: 0 } }, T0);
+    player({ type: "enter", playerId: sasha });
+    expect(cash("Саша")).toMatchObject({ charged: 0, debt: 0 });
+    expect(tournamentCash(db, tid()).summary).toMatchObject({ charged: 0, paid: 0, debt: 0 });
+  });
+
+  it("итог кассы турнира и долги игрока по прошлым турнирам", () => {
+    player({ type: "enter", playerId: sasha, pay: "cash" });
+    player({ type: "enter", playerId: ira });
+    player({ type: "pay", participantId: byName("Ира").id, amount: 500, method: "card" });
+    player({ type: "enter", playerId: oleg });
+    player({ type: "setFree", eventId: cash("Олег").charges[0].eventId, free: true });
+    expect(tournamentCash(db, tid()).summary).toEqual({
+      charged: 3000,
+      free: 1500,
+      paid: 2000,
+      byMethod: { cash: 1500, card: 500, transfer: 0 },
+      debt: 1000,
+      debtors: 1,
+      overpaid: 0,
+    });
+
+    // новый турнир: долг Иры виден с прошлого, его можно закрыть оплатой за прошлый турнир
+    const old = tid();
+    archiveCurrentIfUsed(db, T0 + 10_000);
+    clock({ type: "loadPreset", presetId: state.presets[0].id }, T0 + 10_000);
+    expect(tid()).not.toBe(old);
+    expect(playerDebts(db, ira, tid())).toEqual({ debts: [{ tournamentId: old, name: "Стандарт", date: expect.any(Number), debt: 1000 }], total: 1000 });
+    expect(playerDebts(db, sasha, tid()).total).toBe(0);
+    addPayment(db, { tournamentId: old, playerId: ira, amount: 1000, method: "cash" }, T0 + 11_000);
+    expect(playerDebts(db, ira).debts).toEqual([]);
   });
 });
