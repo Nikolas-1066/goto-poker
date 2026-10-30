@@ -15,6 +15,7 @@ const preset: Preset = {
   doubleAddonStack: 80000,
   rebuyUntilLevel: 2,
   addonUntilLevel: 2, // аддон — на перерыве после 2 уровня
+  prices: { entry: 1500, reentry: 1000, addon: 1000, doubleAddon: 2000 },
   steps: [
     { id: "l1", kind: "level", sb: 100, bb: 200, ante: 0, minutes: 10 },
     { id: "l2", kind: "level", sb: 200, bb: 400, ante: 400, minutes: 10 },
@@ -343,5 +344,21 @@ describe("формат времени", () => {
   it("часы показываются, когда больше часа", () => {
     expect(formatClock(60 * MIN)).toBe("1:00:00");
     expect(formatClock(75 * MIN + 5000)).toBe("1:15:05");
+  });
+});
+
+describe("цены в идущем турнире (касса)", () => {
+  it("копируются из пресета и меняются действием setPrices", () => {
+    const t = started();
+    expect(t.structure?.prices).toEqual({ entry: 1500, reentry: 1000, addon: 1000, doubleAddon: 2000 });
+    const next = act(t, { type: "setPrices", prices: { entry: 1200, reentry: 800, addon: -5, doubleAddon: 1600.4 } }, T0 + 1);
+    expect(next.structure?.prices).toEqual({ entry: 1200, reentry: 800, addon: 0, doubleAddon: 1600 });
+    expect(preset.prices.entry).toBe(1500); // пресет не тронут
+  });
+
+  it("без структуры — понятная ошибка", () => {
+    expect(() => act(emptyTournament(), { type: "setPrices", prices: { entry: 1, reentry: 1, addon: 1, doubleAddon: 1 } }, T0)).toThrow(
+      "Сначала загрузите структуру",
+    );
   });
 });

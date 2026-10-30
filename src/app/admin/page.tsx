@@ -6,6 +6,7 @@ import { TournamentPlayers } from "@/components/admin/TournamentPlayers";
 import { Button, Card, Counter, Field, inputClass } from "@/components/admin/ui";
 import { boardView, formatChips, formatClock, stepMs } from "@/lib/clock";
 import { AddonBreakSelect } from "@/components/admin/AddonBreakSelect";
+import { PricesLine } from "@/components/admin/PricesLine";
 import type { Preset, Step, Tournament, TournamentAction, TournamentMode } from "@/lib/types";
 import { useTournament } from "@/lib/useTournament";
 
@@ -214,6 +215,13 @@ function Control() {
               addonUntilLevel={tournament.structure.addonUntilLevel ?? 0}
               steps={tournament.structure.steps}
               onSave={(rebuyUntilLevel, addonUntilLevel) => act({ type: "setRules", rebuyUntilLevel, addonUntilLevel })}
+            />
+          )}
+          {tournament.structure && status !== "finished" && tournament.mode === "players" && (
+            <PricesLine
+              key={JSON.stringify(tournament.structure.prices ?? null)}
+              prices={tournament.structure.prices ?? { entry: 0, reentry: 0, addon: 0, doubleAddon: 0 }}
+              onSave={(prices) => act({ type: "setPrices", prices })}
             />
           )}
           {tournament.mode === "players" ? (

@@ -1,6 +1,6 @@
 // Пресеты по умолчанию, валидация и помощники для редактора структуры.
 
-import type { BreakStep, LevelStep, Preset, Step } from "./types";
+import type { BreakStep, LevelStep, Preset, Prices, Step } from "./types";
 
 export const newId = () =>
   Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
@@ -81,6 +81,7 @@ export function defaultPresets(): Preset[] {
       doubleAddonStack: 80000,
       rebuyUntilLevel: 8,
       addonUntilLevel: 8,
+      prices: { ...NO_PRICES },
       steps: buildSteps({ minutes: 20, breakEvery: 4, breakMinutes: 10, anteFrom: 3, count: 20 }),
       updatedAt: now,
     },
@@ -94,6 +95,7 @@ export function defaultPresets(): Preset[] {
       doubleAddonStack: 60000,
       rebuyUntilLevel: 6,
       addonUntilLevel: 6,
+      prices: { ...NO_PRICES },
       steps: buildSteps({ minutes: 12, breakEvery: 6, breakMinutes: 10, anteFrom: 2, count: 18 }),
       updatedAt: now,
     },
@@ -107,6 +109,7 @@ export function defaultPresets(): Preset[] {
       doubleAddonStack: 100000,
       rebuyUntilLevel: 8,
       addonUntilLevel: 8,
+      prices: { ...NO_PRICES },
       steps: buildSteps({ minutes: 30, breakEvery: 4, breakMinutes: 15, anteFrom: 4, count: 22 }),
       updatedAt: now,
     },
@@ -148,15 +151,28 @@ export function sanitizePreset(input: unknown, id: string): Preset {
     doubleAddonStack: int(p.doubleAddonStack),
     rebuyUntilLevel: int(p.rebuyUntilLevel, 200),
     addonUntilLevel: int(p.addonUntilLevel, 200),
+    prices: sanitizePrices(p.prices),
     steps,
     updatedAt: Date.now(),
   };
 }
 
+export const NO_PRICES: Prices = { entry: 0, reentry: 0, addon: 0, doubleAddon: 0 };
+
+/** Цены в рублях, целые от 0 до 1 000 000; неизвестное — 0 */
+export function sanitizePrices(input: unknown): Prices {
+  const p = (input ?? {}) as Record<string, unknown>;
+  const rub = (v: unknown) => int(v, 1_000_000);
+  return { entry: rub(p.entry), reentry: rub(p.reentry), addon: rub(p.addon), doubleAddon: rub(p.doubleAddon) };
+}
+
 /** Дополнить пресет из старой версии базы новыми полями. */
-export function withPresetDefaults<T extends Partial<Preset>>(p: T): T & Pick<Preset, "doubleAddonStack" | "rebuyUntilLevel" | "addonUntilLevel"> {
+export function withPresetDefaults<T extends Partial<Preset>>(
+  p: T,
+): T & Pick<Preset, "doubleAddonStack" | "rebuyUntilLevel" | "addonUntilLevel" | "prices"> {
   return {
     ...p,
+    prices: sanitizePrices(p.prices),
     doubleAddonStack: p.doubleAddonStack ?? (p.addonStack ?? 0) * 2,
     rebuyUntilLevel: p.rebuyUntilLevel ?? 0,
     addonUntilLevel: p.addonUntilLevel ?? 0,

@@ -5,7 +5,7 @@
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { emptyTournament } from "../clock";
-import { defaultPresets, withPresetDefaults } from "../presets";
+import { defaultPresets, sanitizePrices, withPresetDefaults } from "../presets";
 import type { Db, Preset, Step, Tournament } from "../types";
 import { MIGRATIONS } from "./schema";
 
@@ -106,6 +106,7 @@ type PresetRow = {
   rebuy_until_level: number;
   addon_until_level: number;
   steps_json: string;
+  prices_json: string;
   updated_at: number;
 };
 
@@ -141,6 +142,7 @@ function presetFromRow(r: PresetRow): Preset {
     doubleAddonStack: r.double_addon_stack,
     rebuyUntilLevel: r.rebuy_until_level,
     addonUntilLevel: r.addon_until_level,
+    prices: sanitizePrices(JSON.parse(r.prices_json || "{}")),
     steps: JSON.parse(r.steps_json) as Step[],
     updatedAt: r.updated_at,
   };
@@ -195,14 +197,15 @@ export function writeState(db: DatabaseSync, prev: Db | null, next: Db) {
 
   const upsert = db.prepare(`
     INSERT INTO presets (id, name, description, starting_stack, rebuy_stack, addon_stack, double_addon_stack,
-                         rebuy_until_level, addon_until_level, steps_json, sort_order, updated_at)
+                         rebuy_until_level, addon_until_level, prices_json, steps_json, sort_order, updated_at)
     VALUES (:id, :name, :description, :starting_stack, :rebuy_stack, :addon_stack, :double_addon_stack,
-            :rebuy_until_level, :addon_until_level, :steps_json, :sort_order, :updated_at)
+            :rebuy_until_level, :addon_until_level, :prices_json, :steps_json, :sort_order, :updated_at)
     ON CONFLICT (id) DO UPDATE SET
       name = excluded.name, description = excluded.description, starting_stack = excluded.starting_stack,
       rebuy_stack = excluded.rebuy_stack, addon_stack = excluded.addon_stack,
       double_addon_stack = excluded.double_addon_stack, rebuy_until_level = excluded.rebuy_until_level,
-      addon_until_level = excluded.addon_until_level, steps_json = excluded.steps_json,
+      addon_until_level = excluded.addon_until_level, prices_json = excluded.prices_json,
+      steps_json = excluded.steps_json,
       sort_order = excluded.sort_order, updated_at = excluded.updated_at`);
   next.presets.forEach((p, i) => {
     const old = prevPresets.get(p.id);
@@ -217,6 +220,7 @@ export function writeState(db: DatabaseSync, prev: Db | null, next: Db) {
       double_addon_stack: p.doubleAddonStack,
       rebuy_until_level: p.rebuyUntilLevel,
       addon_until_level: p.addonUntilLevel,
+      prices_json: JSON.stringify(p.prices ?? {}),
       steps_json: JSON.stringify(p.steps),
       sort_order: i,
       updated_at: p.updatedAt,

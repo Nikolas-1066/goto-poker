@@ -19,6 +19,9 @@ export type BreakStep = {
 
 export type Step = LevelStep | BreakStep;
 
+/** Цены в рублях (docs/CASH.md); 0 — бесплатно / не задано */
+export type Prices = { entry: number; reentry: number; addon: number; doubleAddon: number };
+
 /** Пресет турнира: структура блайндов + параметры стека. */
 export type Preset = {
   id: string;
@@ -33,6 +36,8 @@ export type Preset = {
   rebuyUntilLevel: number;
   /** Аддон (обычный или двойной) — только на перерыве после этого уровня; 0 — без аддонов */
   addonUntilLevel: number;
+  /** Цены для кассы */
+  prices: Prices;
   steps: Step[];
   updatedAt: number;
 };
@@ -101,6 +106,8 @@ export type TournamentAction =
   | { type: "finish" }
   /** Поменять у идущего турнира, до какого уровня открыты ребаи (re-entry) и аддоны; 0 — нет */
   | { type: "setRules"; rebuyUntilLevel: number; addonUntilLevel: number }
+  /** Поменять цены у идущего турнира — действуют на новые входы и аддоны */
+  | { type: "setPrices"; prices: Prices }
   | {
       type: "update";
       patch: Partial<

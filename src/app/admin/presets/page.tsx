@@ -5,7 +5,7 @@ import { AddonBreakSelect } from "@/components/admin/AddonBreakSelect";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Button, Card, Field, inputClass } from "@/components/admin/ui";
 import { formatChips, formatClock, structureDurationMs } from "@/lib/clock";
-import { newId, suggestNextLevel, withPresetDefaults } from "@/lib/presets";
+import { newId, NO_PRICES, suggestNextLevel, withPresetDefaults } from "@/lib/presets";
 import type { LevelStep, Preset, Step } from "@/lib/types";
 
 export default function PresetsPage() {
@@ -32,6 +32,7 @@ function blankDraft(): Draft {
     doubleAddonStack: 60000,
     rebuyUntilLevel: 0,
     addonUntilLevel: 0,
+    prices: { ...NO_PRICES },
     steps: [first],
   };
 }
@@ -314,6 +315,23 @@ function PresetForm({
           </Field>
           <Field label="Стек двойного аддона">
             <NumInput value={draft.doubleAddonStack} onChange={(v) => set({ doubleAddonStack: v })} />
+          </Field>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
+          <Field label="Цена входа, ₽">
+            <NumInput value={draft.prices.entry} onChange={(v) => set({ prices: { ...draft.prices, entry: v } })} />
+          </Field>
+          <Field label="Цена re-entry, ₽">
+            <NumInput value={draft.prices.reentry} onChange={(v) => set({ prices: { ...draft.prices, reentry: v } })} />
+          </Field>
+          <Field label="Цена аддона, ₽">
+            <NumInput value={draft.prices.addon} onChange={(v) => set({ prices: { ...draft.prices, addon: v } })} />
+          </Field>
+          <Field label="Цена двойного аддона, ₽">
+            <NumInput
+              value={draft.prices.doubleAddon}
+              onChange={(v) => set({ prices: { ...draft.prices, doubleAddon: v } })}
+            />
           </Field>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">

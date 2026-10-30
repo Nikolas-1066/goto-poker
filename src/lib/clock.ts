@@ -2,6 +2,7 @@
 // поэтому табло и админка всегда показывают одно и то же время.
 
 import type { LevelStep, Step, Tournament, TournamentAction } from "./types";
+import { sanitizePrices } from "./presets";
 
 export const stepMs = (step: Step | undefined) =>
   step ? Math.max(0, Math.round(step.minutes * 60_000)) : 0;
@@ -219,6 +220,11 @@ export function applyAction(
           addonUntilLevel: level(action.addonUntilLevel),
         },
       };
+      break;
+    }
+    case "setPrices": {
+      if (!t.structure) throw new Error("Сначала загрузите структуру турнира");
+      next = { ...t, structure: { ...t.structure, prices: sanitizePrices(action.prices) } };
       break;
     }
     case "update": {

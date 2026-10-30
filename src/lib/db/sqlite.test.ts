@@ -143,7 +143,9 @@ describe("перенос из goto-poker.json", () => {
     const old = state.presets.find((p) => p.id === "old")!;
     expect(old.doubleAddonStack).toBe(60000);
     expect(old.rebuyUntilLevel).toBe(0);
+    expect(old.prices).toEqual({ entry: 0, reentry: 0, addon: 0, doubleAddon: 0 });
     expect(state.tournament.structure?.doubleAddonStack).toBe(60000);
+    expect(state.tournament.structure?.prices).toEqual({ entry: 0, reentry: 0, addon: 0, doubleAddon: 0 });
   });
 
   it("JSON не удаляется: копия в backups/, исходник переименован", () => {
@@ -212,6 +214,21 @@ describe("запись изменений", () => {
     expect(loadState(db)).toEqual(next);
   });
 
+  it("цены пресета и турнира сохраняются", () => {
+    const { db, state } = open();
+    const prices = { entry: 1500, reentry: 1000, addon: 1000, doubleAddon: 2000 };
+    const find = (id: string) => next.presets.find((p) => p.id === id);
+    let next = change(db, state, (d) => {
+      d.presets[0].prices = prices;
+    });
+    next = change(db, next, (d) => {
+      d.tournament = applyAction(d.tournament, { type: "loadPreset", presetId: d.presets[0].id }, NOW, find);
+    });
+    const loaded = loadState(db);
+    expect(loaded.presets[0].prices).toEqual(prices);
+    expect(loaded.tournament.structure?.prices).toEqual(prices);
+  });
+
   it("после закрытия и нового открытия всё на месте", () => {
     writeLegacy();
     const first = open();
@@ -260,6 +277,22 @@ describe("схема и миграции", () => {
     const { db } = open();
     db.exec(`PRAGMA user_version = ${MIGRATIONS.length + 1}`);
     expect(() => migrate(db)).toThrow("более новой версией");
+  });
+
+  it("база версии 1 (без цен) обновляется: пресеты на месте, цены — 0", () => {
+    const file = path.join(dir, "v1.db");
+    const { DatabaseSync } = process.getBuiltinModule("node:sqlite");
+    const old = new DatabaseSync(file);
+    old.exec(MIGRATIONS[0]);
+    old.exec("PRAGMA user_version = 1");
+    old.prepare("INSERT INTO presets (id, name, steps_json, updated_at) VALUES ('p', 'Старый', '[]', 1)").run();
+    old.close();
+    const db = openDatabase(file);
+    opened.push(db);
+    expect(schemaVersion(db)).toBe(MIGRATIONS.length);
+    const p = loadState(db).presets[0];
+    expect(p.name).toBe("Старый");
+    expect(p.prices).toEqual({ entry: 0, reentry: 0, addon: 0, doubleAddon: 0 });
   });
 
   it("повторная миграция ничего не делает", () => {

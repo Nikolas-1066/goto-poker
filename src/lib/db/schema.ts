@@ -186,4 +186,8 @@ export const MIGRATIONS: string[] = [
     note      TEXT NOT NULL DEFAULT ''
   );
   `,
+  // 2 — цены для кассы в пресете (docs/CASH.md): {"entry", "reentry", "addon", "doubleAddon"} в рублях
+  `
+  ALTER TABLE presets ADD COLUMN prices_json TEXT NOT NULL DEFAULT '{}';
+  `,
 ];
