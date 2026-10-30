@@ -6,6 +6,7 @@ import { TournamentPlayers } from "@/components/admin/TournamentPlayers";
 import { Button, Card, Counter, Field, inputClass } from "@/components/admin/ui";
 import { boardView, formatChips, formatClock, stepMs } from "@/lib/clock";
 import { AddonBreakSelect } from "@/components/admin/AddonBreakSelect";
+import { fetchDebtWarning } from "@/components/admin/Cash";
 import { PricesLine } from "@/components/admin/PricesLine";
 import type { Preset, Step, Tournament, TournamentAction, TournamentMode } from "@/lib/types";
 import { useTournament } from "@/lib/useTournament";
@@ -358,7 +359,10 @@ function Control() {
               </Button>
               <Button
                 disabled={!hasStructure || status === "finished"}
-                onClick={() => act({ type: "finish" }, "Завершить турнир?")}
+                onClick={async () => {
+                  const warning = tournament.mode === "players" ? await fetchDebtWarning() : "";
+                  act({ type: "finish" }, warning ? `Завершить турнир?\n\n${warning}` : "Завершить турнир?");
+                }}
               >
                 Завершить
               </Button>

@@ -560,7 +560,17 @@ describe("касса (docs/CASH.md)", () => {
     expect(tid()).not.toBe(old);
     expect(playerDebts(db, ira, tid())).toEqual({ debts: [{ tournamentId: old, name: "Стандарт", date: expect.any(Number), debt: 1000 }], total: 1000 });
     expect(playerDebts(db, sasha, tid()).total).toBe(0);
-    addPayment(db, { tournamentId: old, playerId: ira, amount: 1000, method: "cash" }, T0 + 11_000);
+    // Ира пришла на новый турнир — у неё видно долг, его принимают прямо здесь
+    player({ type: "register", playerId: ira }, T0 + 11_000);
+    expect(byName("Ира").oldDebts).toEqual([{ tournamentId: old, name: "Стандарт", date: expect.any(Number), debt: 1000 }]);
+    expect(byName("Ира").cash.debt).toBe(0); // в новом турнире — своя касса
+    player({ type: "pay", participantId: byName("Ира").id, amount: 400, method: "cash", tournamentId: old }, T0 + 12_000);
+    expect(lastResult!.message).toBe("Ира: принято 400 ₽ (наличные) — долг с прошлого турнира, осталось 600 ₽");
+    expect(() =>
+      player({ type: "pay", participantId: byName("Ира").id, amount: 700, method: "cash", tournamentId: old }, T0 + 13_000),
+    ).toThrow("Больше, чем долг: 600 ₽");
+    addPayment(db, { tournamentId: old, playerId: ira, amount: 600, method: "card" }, T0 + 14_000);
     expect(playerDebts(db, ira).debts).toEqual([]);
+    expect(byName("Ира").oldDebts).toEqual([]);
   });
 });

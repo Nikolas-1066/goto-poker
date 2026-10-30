@@ -6,6 +6,7 @@
 import { useState } from "react";
 import {
   CHARGE_LABEL,
+  debtWarning,
   formatRub,
   PAY_METHOD_LABEL,
   PAY_METHODS,
@@ -13,6 +14,7 @@ import {
   type PayMethod,
   type PlayerCash,
 } from "@/lib/cash";
+import type { PlayerDebt } from "@/lib/db/cash";
 import { Button, inputClass } from "./ui";
 
 /** Есть ли у игрока что показывать в кассе */
@@ -213,4 +215,70 @@ export function CashLine({ summary }: { summary: CashSummary }) {
       )}
     </div>
   );
+}
+
+const day = (at: number) => new Date(at).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+
+/** Долг с прошлых турниров: «Долг 1 000 ₽ с 25.10» */
+export function OldDebtBadge({ debts, open, onClick }: { debts: PlayerDebt[]; open: boolean; onClick: () => void }) {
+  if (debts.length === 0) return null;
+  const total = debts.reduce((s, d) => s + d.debt, 0);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`mt-1 inline-flex items-center rounded-full border border-dashed border-red-400/60 px-2 py-0.5 text-xs font-semibold tabular-nums text-red-300 ${
+        open ? "ring-1 ring-white/30" : ""
+      }`}
+    >
+      Долг {formatRub(total)} с {day(debts[0].date)}
+    </button>
+  );
+}
+
+/** Долги с прошлых турниров: по каждому — принять всю сумму наличными / картой / переводом */
+export function OldDebtsPanel({
+  debts,
+  busy,
+  onPay,
+  title = "Долг с прошлых турниров",
+}: {
+  debts: PlayerDebt[];
+  busy: boolean;
+  title?: string;
+  onPay: (tournamentId: number, amount: number, method: PayMethod) => void;
+}) {
+  if (debts.length === 0) return null;
+  return (
+    <div className="mt-2 space-y-2 rounded-lg border border-red-400/30 bg-red-500/[0.06] p-3 text-sm">
+      <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-red-300">{title}</div>
+      {debts.map((d) => (
+        <div key={d.tournamentId} className="space-y-1">
+          <div className="flex justify-between gap-2">
+            <span className="min-w-0 truncate">
+              {day(d.date)} · {d.name}
+            </span>
+            <b className="shrink-0 tabular-nums">{formatRub(d.debt)}</b>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {PAY_METHODS.map((m) => (
+              <Button key={m} disabled={busy} onClick={() => onPay(d.tournamentId, d.debt, m)}>
+                {PAY_METHOD_LABEL[m]}
+              </Button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Предупреждение о долгах для текущего турнира (запрос к серверу) — для кнопки «Завершить» на часах */
+export async function fetchDebtWarning() {
+  try {
+    const res = await fetch("/api/tournament/players", { cache: "no-store" });
+    return res.ok ? debtWarning((await res.json()).cash) : "";
+  } catch {
+    return "";
+  }
 }

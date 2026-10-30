@@ -5,13 +5,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ParticipantView, PlayerAction, finalInfo } from "@/lib/db/tournament";
-import type { CashSummary, PayMethod } from "@/lib/cash";
+import { debtWarning, formatRub, type CashSummary, type PayMethod } from "@/lib/cash";
 import { formatEloDelta } from "@/lib/rating/elo";
 import { formatPlace } from "@/lib/results";
 import { phoneTail, searchPlayers, type Player } from "@/lib/players";
 import { formatSeat, MAX_SEATS, MAX_TABLES } from "@/lib/seating";
 import type { Tournament } from "@/lib/types";
-import { CashLine, CashPanel, EnterButtons, PayBadge } from "./Cash";
+import { CashLine, CashPanel, EnterButtons, OldDebtBadge, OldDebtsPanel, PayBadge } from "./Cash";
 import { Button, inputClass } from "./ui";
 
 type FinalInfo = ReturnType<typeof finalInfo>;
@@ -29,6 +29,8 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
   /** Финал ли это и по каким закрытым периодам можно сделать финал */
   const [final, setFinal] = useState<FinalInfo | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
+  /** Долги игроков по всем турнирам — видно уже при поиске */
+  const [debts, setDebts] = useState<Record<number, number>>({});
   const [query, setQuery] = useState("");
   const [newPlayer, setNewPlayer] = useState<{ name: string; phone: string } | null>(null);
   const [error, setError] = useState("");
@@ -41,6 +43,8 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
   const [seatOf, setSeatOf] = useState<number | null>(null);
   /** У кого открыто окно оплаты; итог кассы турнира */
   const [cashOf, setCashOf] = useState<number | null>(null);
+  /** У кого открыт долг с прошлых турниров */
+  const [oldDebtOf, setOldDebtOf] = useState<number | null>(null);
   const [cashSummary, setCashSummary] = useState<CashSummary | null>(null);
   /** Есть цена входа — показываем «Пришёл + оплатил» */
   const withPay = (tournament.structure?.prices?.entry ?? 0) > 0;
@@ -49,9 +53,22 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
 
   /** Плашка оплаты и окно оплаты под строкой игрока */
   const cashable = (p: ParticipantView) => ({
-    badge: <PayBadge cash={p.cash} open={cashOf === p.id} onClick={() => setCashOf(cashOf === p.id ? null : p.id)} />,
-    cashPanel:
-      cashOf === p.id ? (
+    badge: (
+      <div className="flex flex-wrap gap-1">
+        <PayBadge cash={p.cash} open={cashOf === p.id} onClick={() => setCashOf(cashOf === p.id ? null : p.id)} />
+        <OldDebtBadge debts={p.oldDebts} open={oldDebtOf === p.id} onClick={() => setOldDebtOf(oldDebtOf === p.id ? null : p.id)} />
+      </div>
+    ),
+    cashPanel: (
+      <>
+        {oldDebtOf === p.id && (
+          <OldDebtsPanel
+            debts={p.oldDebts}
+            busy={busy}
+            onPay={(tournamentId, amount, method) => act({ type: "pay", participantId: p.id, amount, method, tournamentId })}
+          />
+        )}
+        {cashOf === p.id && (
         <CashPanel
           key={`${p.cash.debt}-${p.cash.payments.length}`}
           name={p.name}
@@ -60,8 +77,10 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
           onPay={(amount, method) => act({ type: "pay", participantId: p.id, amount, method })}
           onCancelPayment={(paymentId) => act({ type: "cancelPayment", paymentId })}
           onSetFree={(eventId, free) => act({ type: "setFree", eventId, free })}
-        />
-      ) : null,
+          />
+        )}
+      </>
+    ),
   });
 
   /** Строка игрока с выбором стола по нажатию на имя */
@@ -102,7 +121,11 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
 
   const loadPlayers = useCallback(async () => {
     const res = await fetch("/api/players", { cache: "no-store" });
-    if (res.ok) setPlayers((await res.json()).players);
+    if (res.ok) {
+      const data = await res.json();
+      setPlayers(data.players);
+      setDebts(data.debts ?? {});
+    }
   }, []);
 
   // при каждом изменении турнира (в т.ч. с другого устройства) — свежий список участников
@@ -138,6 +161,13 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
     } finally {
       setBusy(false);
     }
+  }
+
+  /** Завершить турнир; если кто-то не доплатил — предупредить (завершить всё равно можно) */
+  async function finish(dealOrder?: number[]) {
+    const warning = debtWarning(cashSummary);
+    if (warning && !window.confirm(`${warning}\n\nЗавершить турнир?`)) return false;
+    return act(dealOrder ? { type: "finish", dealOrder } : { type: "finish" });
   }
 
   async function createAndThen(kind: "register" | "enter") {
@@ -246,7 +276,10 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
                   <div key={pl.id} className="flex items-center gap-2 px-3 py-2">
                     <div className="min-w-0 flex-1">
                       <div className="truncate font-semibold">{pl.name}</div>
-                      <div className="text-xs text-slate-500">{phoneTail(pl.phone)}</div>
+                      <div className="text-xs text-slate-500">
+                        {phoneTail(pl.phone)}
+                        {debts[pl.id] > 0 && <span className="font-semibold text-red-300"> · долг {formatRub(debts[pl.id])}</span>}
+                      </div>
                     </div>
                     {p && p.status !== "registered" ? (
                       <span className="text-xs text-slate-500">{p.status === "playing" ? "в игре" : "вылетел"}</span>
@@ -350,7 +383,7 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
           {playing.length === 0 && <div className="py-3 text-sm text-slate-500">Пока никого. Найдите игрока выше и нажмите «Пришёл».</div>}
           {!finished && playing.length === 1 && busted.length > 0 && (
             <div className="py-2">
-              <Button variant="primary" className="w-full py-3" disabled={busy} onClick={() => act({ type: "finish" })}>
+              <Button variant="primary" className="w-full py-3" disabled={busy} onClick={() => finish()}>
                 Завершить турнир — победитель {playing[0].name}
               </Button>
             </div>
@@ -368,7 +401,7 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
               busy={busy}
               onCancel={() => setDealOpen(false)}
               onSubmit={async (dealOrder) => {
-                if (await act({ type: "finish", dealOrder })) setDealOpen(false);
+                if (await finish(dealOrder)) setDealOpen(false);
               }}
             />
           )}

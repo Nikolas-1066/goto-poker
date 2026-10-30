@@ -26,7 +26,16 @@ import {
 } from "../results";
 import type { Db, Tournament, TournamentMode } from "../types";
 import { KIND_LABEL, type TournamentKind } from "../rating/points";
-import { addPayment, cancelPayment, hasPayments, loadCharges, loadPayments, setEventFree } from "./cash";
+import {
+  addPayment,
+  cancelPayment,
+  debtsByPlayer,
+  hasPayments,
+  loadCharges,
+  loadPayments,
+  setEventFree,
+  type PlayerDebt,
+} from "./cash";
 import { finalizeResults } from "./history";
 import { finalistsOf, getPeriod } from "./periods";
 import { audit } from "./sqlite";
@@ -62,6 +71,8 @@ export type ParticipantView = {
   eloAfter: number | null;
   /** Касса игрока в этом турнире (docs/CASH.md) */
   cash: PlayerCash;
+  /** Долги игрока с прошлых турниров */
+  oldDebts: PlayerDebt[];
 };
 
 export type PlayerAction =
@@ -95,8 +106,11 @@ export type PlayerAction =
   | { type: "setMode"; mode: TournamentMode }
   /** Касса: отметить вход / re-entry / аддон бесплатным или снять отметку */
   | { type: "setFree"; eventId: number; free: boolean }
-  /** Касса: принять оплату (не больше долга игрока за этот турнир) */
-  | { type: "pay"; participantId: number; amount: number; method: PayMethod }
+  /**
+   * Касса: принять оплату (не больше долга игрока за этот турнир).
+   * tournamentId — оплата долга за прошлый турнир
+   */
+  | { type: "pay"; participantId: number; amount: number; method: PayMethod; tournamentId?: number }
   /** Касса: отменить ошибочную оплату */
   | { type: "cancelPayment"; paymentId: number };
 
@@ -183,6 +197,7 @@ export function listParticipants(db: DatabaseSync, tournamentId: number, finishe
   const res = computeResults(journal, { finished });
   const names = new Map(rows.map((r) => [r.id, r.name]));
   const cash = cashByPlayer(loadCharges(db, tournamentId), loadPayments(db, tournamentId));
+  const debts = debtsByPlayer(db, { exceptTournamentId: tournamentId });
   const list = rows.map((r): ParticipantView => {
     const x = res.participants.get(r.id);
     const bust = x?.lastBustId != null ? journal.find((e) => e.id === x.lastBustId) : undefined;
@@ -219,6 +234,7 @@ export function listParticipants(db: DatabaseSync, tournamentId: number, finishe
         charges: [],
         payments: [],
       },
+      oldDebts: debts.get(r.player_id) ?? [],
     };
   });
   const rank = { playing: 0, registered: 1, busted: 2 } as const;
@@ -523,11 +539,12 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
     case "pay": {
       const p = participantOf(db, cur.id, action.participantId);
       const amount = Number(action.amount);
-      addPayment(db, { tournamentId: cur.id, playerId: p.player_id, amount, method: action.method }, now);
-      const left = debtOf(p.player_id);
+      const old = action.tournamentId != null && Number(action.tournamentId) !== cur.id ? Number(action.tournamentId) : null;
+      addPayment(db, { tournamentId: old ?? cur.id, playerId: p.player_id, amount, method: action.method }, now);
+      const left = old != null ? (debtsByPlayer(db, { playerId: p.player_id }).get(p.player_id)?.find((d) => d.tournamentId === old)?.debt ?? 0) : debtOf(p.player_id);
       message = `${name(p.id)}: принято ${formatRub(amount)} (${PAY_METHOD_LABEL[action.method].toLowerCase()})${
-        left > 0 ? `, осталось ${formatRub(left)}` : ""
-      }`;
+        old != null ? " — долг с прошлого турнира" : ""
+      }${left > 0 ? `, осталось ${formatRub(left)}` : ""}`;
       break;
     }
     case "cancelPayment": {

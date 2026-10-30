@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cashByPlayer, cashSummary, checkPayment, formatRub, hasPrices, priceOf, type Charge, type Payment } from "./cash";
+import { cashByPlayer, cashSummary, checkPayment, debtWarning, formatRub, hasPrices, priceOf, type Charge, type Payment } from "./cash";
 
 let id = 0;
 const ch = (playerId: number, type: Charge["type"], price: number, extra: Partial<Charge> = {}): Charge => ({
@@ -92,5 +92,18 @@ describe("цены", () => {
     expect(hasPrices(prices)).toBe(true);
     expect(hasPrices({ entry: 0, reentry: 0, addon: 0, doubleAddon: 0 })).toBe(false);
     expect([formatRub(1500), formatRub(0), formatRub(125000)]).toEqual(["1 500 ₽", "0 ₽", "125 000 ₽"]);
+  });
+});
+
+describe("предупреждение при завершении", () => {
+  const sum = (debtors: number, debt: number) => ({ ...cashSummary([]), debtors, debt });
+  it("долгов нет — молчит; есть — сколько игроков и сумма", () => {
+    expect(debtWarning(sum(0, 0))).toBe("");
+    expect(debtWarning(null)).toBe("");
+    expect(debtWarning(sum(1, 1500))).toBe("Касса: 1 игрок не доплатил, всего 1 500 ₽. Долг останется на карточке игрока.");
+    expect(debtWarning(sum(3, 4500))).toMatch("3 игрока не доплатили, всего 4 500 ₽");
+    expect(debtWarning(sum(5, 7500))).toMatch("5 игроков не доплатили");
+    expect(debtWarning(sum(12, 100))).toMatch("12 игроков");
+    expect(debtWarning(sum(21, 100))).toMatch("21 игрок не доплатил");
   });
 });

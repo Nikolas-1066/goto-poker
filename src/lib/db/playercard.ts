@@ -2,6 +2,7 @@
 
 import type { DatabaseSync } from "node:sqlite";
 import type { TournamentKind } from "../rating/points";
+import { playerDebts } from "./cash";
 import { getPlayer } from "./players";
 import { finalistsOf, listPeriods, openPeriod, PERIOD_LABEL, standingsOf } from "./periods";
 import { getSettings, type PeriodKind } from "./settings";
@@ -111,5 +112,13 @@ export function playerCard(db: DatabaseSync, playerId: number) {
     .filter((t) => t.eloAfter != null)
     .map((t) => ({ at: t.at, elo: Math.round(t.eloAfter!) }));
 
-  return { player: { ...player, elo: Math.round(player.elo), eloGames: games }, stats, ratings, finals, tournaments, eloHistory };
+  return {
+    player: { ...player, elo: Math.round(player.elo), eloGames: games },
+    stats,
+    ratings,
+    finals,
+    tournaments,
+    eloHistory,
+    debts: playerDebts(db, playerId),
+  };
 }

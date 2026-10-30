@@ -9,6 +9,8 @@ import { formatPhone } from "@/lib/players";
 import { formatEloDelta } from "@/lib/rating/elo";
 import { KIND_LABEL } from "@/lib/rating/points";
 import { formatPlace } from "@/lib/results";
+import { formatRub, type PayMethod } from "@/lib/cash";
+import { OldDebtsPanel } from "./Cash";
 import { PlayerForm } from "./PlayerForm";
 import { Button, Card } from "./ui";
 
@@ -21,6 +23,8 @@ export function PlayerCard({ id }: { id: number }) {
   const [card, setCard] = useState<CardData | null>(null);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [flash, setFlash] = useState("");
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/players/${id}`, { cache: "no-store" });
@@ -34,6 +38,21 @@ export function PlayerCard({ id }: { id: number }) {
     load();
   }, [load]);
 
+  async function pay(tournamentId: number, amount: number, method: PayMethod) {
+    setBusy(true);
+    setError("");
+    const res = await fetch(`/api/players/${id}/pay`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tournamentId, amount, method }),
+    });
+    const d = await res.json();
+    setBusy(false);
+    if (!res.ok) return setError(d.error ?? "Ошибка");
+    setFlash(d.message);
+    load();
+  }
+
   const back = (
     <Link href="/admin/players" className="text-sm text-slate-400 hover:text-slate-200">
       ← Игроки
@@ -41,7 +60,7 @@ export function PlayerCard({ id }: { id: number }) {
   );
   if (!card) return <div className="mx-auto max-w-3xl">{error ? <Card action={back}>{error}</Card> : <div className="py-20 text-center text-slate-500">Загрузка…</div>}</div>;
 
-  const { player, stats, ratings, finals, tournaments, eloHistory } = card;
+  const { player, stats, ratings, finals, tournaments, eloHistory, debts } = card;
 
   if (editing) {
     return (
@@ -73,6 +92,18 @@ export function PlayerCard({ id }: { id: number }) {
             Изменить
           </Button>
         </Card>
+
+        {(debts.total > 0 || flash) && (
+          <Card title={debts.total > 0 ? `Долг · ${formatRub(debts.total)}` : "Долг"}>
+            {flash && <div className="mb-2 text-sm text-emerald-300">{flash}</div>}
+            {error && <div className="mb-2 text-sm text-red-300">{error}</div>}
+            {debts.total > 0 ? (
+              <OldDebtsPanel debts={debts.debts} busy={busy} onPay={pay} title="Не доплачено за турниры" />
+            ) : (
+              <div className="text-sm text-slate-400">Долгов нет</div>
+            )}
+          </Card>
+        )}
 
         <Card title="Статистика">
           <div className="grid grid-cols-3 gap-2 text-center">

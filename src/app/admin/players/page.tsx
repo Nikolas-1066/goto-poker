@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { PlayerForm, type PlayerDraft } from "@/components/admin/PlayerForm";
 import { Button, Card, inputClass } from "@/components/admin/ui";
+import { formatRub } from "@/lib/cash";
 import { phoneTail, searchPlayers, type Player } from "@/lib/players";
 
 export default function PlayersPage() {
@@ -18,6 +19,9 @@ export default function PlayersPage() {
 
 function Players() {
   const [players, setPlayers] = useState<Player[] | null>(null);
+  /** Долги: { [playerId]: сумма } и фильтр «Должники» */
+  const [debts, setDebts] = useState<Record<number, number>>({});
+  const [onlyDebtors, setOnlyDebtors] = useState(false);
   const [query, setQuery] = useState("");
   const [draft, setDraft] = useState<PlayerDraft | null>(null);
   const [error, setError] = useState("");
@@ -32,6 +36,7 @@ function Players() {
       return;
     }
     setPlayers(data.players);
+    setDebts(data.debts ?? {});
   }
 
   useEffect(() => {
@@ -40,7 +45,11 @@ function Players() {
     load();
   }, []);
 
-  const found = useMemo(() => searchPlayers(players ?? [], query, 100), [players, query]);
+  const debtors = Object.keys(debts).length;
+  const found = useMemo(
+    () => searchPlayers((players ?? []).filter((p) => !onlyDebtors || debts[p.id] > 0), query, 100),
+    [players, query, onlyDebtors, debts],
+  );
 
   function startNew() {
     const q = query.trim();
@@ -84,6 +93,11 @@ function Players() {
             onChange={(e) => setQuery(e.target.value)}
             enterKeyHint="search"
           />
+          {debtors > 0 && (
+            <Button className="mt-2" variant={onlyDebtors ? "primary" : "ghost"} onClick={() => setOnlyDebtors(!onlyDebtors)}>
+              Должники · {debtors}
+            </Button>
+          )}
           {flash && <div className="mt-3 text-sm text-emerald-300">{flash}</div>}
           {error && <div className="mt-3 text-sm text-red-300">{error}</div>}
 
@@ -97,6 +111,7 @@ function Players() {
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-semibold">{p.name}</div>
                   {p.note && <div className="truncate text-xs text-slate-500">{p.note}</div>}
+                  {debts[p.id] > 0 && <div className="text-xs font-semibold text-red-300">Долг {formatRub(debts[p.id])}</div>}
                 </div>
                 <div className="shrink-0 text-right text-sm tabular-nums text-slate-400">
                   <div>{phoneTail(p.phone)}</div>

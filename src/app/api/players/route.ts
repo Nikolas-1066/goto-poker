@@ -1,5 +1,6 @@
 import { connection, type NextRequest } from "next/server";
 import { badRequest, isAdmin, unauthorized } from "@/lib/auth";
+import { debtsByPlayer } from "@/lib/db/cash";
 import { createPlayer, listPlayers } from "@/lib/db/players";
 import { withDatabase } from "@/lib/store";
 
@@ -8,8 +9,12 @@ export async function GET(req: NextRequest) {
   await connection();
   if (!isAdmin(req)) return unauthorized();
   try {
-    const players = await withDatabase((db) => listPlayers(db));
-    return Response.json({ players }, { headers: { "Cache-Control": "no-store" } });
+    const { players, debts } = await withDatabase((db) => ({
+      players: listPlayers(db),
+      // долг по всем турнирам: { [playerId]: сумма }
+      debts: Object.fromEntries([...debtsByPlayer(db)].map(([id, list]) => [id, list.reduce((s, d) => s + d.debt, 0)])),
+    }));
+    return Response.json({ players, debts }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     return badRequest(err instanceof Error ? err.message : "Ошибка");
   }

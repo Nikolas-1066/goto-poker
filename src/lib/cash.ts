@@ -126,6 +126,21 @@ export function checkPayment(amount: number, method: string, debt: number) {
   return null;
 }
 
+/** «3 игрока не доплатили, всего 4 500 ₽» — предупреждение при завершении турнира (завершить всё равно можно) */
+export function debtWarning(summary: CashSummary | null | undefined) {
+  if (!summary || summary.debt <= 0) return "";
+  const n = summary.debtors;
+  const d10 = n % 10;
+  const d100 = n % 100;
+  const who =
+    d10 === 1 && d100 !== 11
+      ? "игрок не доплатил"
+      : d10 >= 2 && d10 <= 4 && (d100 < 12 || d100 > 14)
+        ? "игрока не доплатили"
+        : "игроков не доплатили";
+  return `Касса: ${n} ${who}, всего ${formatRub(summary.debt)}. Долг останется на карточке игрока.`;
+}
+
 /** «1 500 ₽» */
 export function formatRub(n: number) {
   return `${Math.round(n).toLocaleString("ru-RU").replace(/[\u00a0\u202f]/g, " ")} ₽`;

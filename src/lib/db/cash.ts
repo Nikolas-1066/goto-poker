@@ -109,23 +109,44 @@ export function hasPayments(db: DatabaseSync, tournamentId: number, playerId: nu
 
 export type PlayerDebt = { tournamentId: number; name: string; date: number; debt: number };
 
+/**
+ * Долги по турнирам (кроме `exceptTournamentId`) у всех игроков или у одного — ключ playerId,
+ * старые турниры сначала. Одним запросом: для списков игроков и участников.
+ */
+export function debtsByPlayer(db: DatabaseSync, opts: { exceptTournamentId?: number; playerId?: number } = {}) {
+  const rows = db
+    .prepare(
+      `WITH ch AS (
+         SELECT p.player_id AS pid, e.tournament_id AS tid, SUM(e.price) AS amt
+         FROM events e JOIN participants p ON p.id = e.participant_id
+         WHERE e.type <> 'bust' AND e.free = 0 AND e.cancelled_at IS NULL AND e.price > 0
+         GROUP BY p.player_id, e.tournament_id),
+       pay AS (
+         SELECT player_id AS pid, tournament_id AS tid, SUM(amount) AS amt
+         FROM payments WHERE cancelled_at IS NULL GROUP BY player_id, tournament_id)
+       SELECT ch.pid, ch.tid, t.name, COALESCE(t.started_at, t.created_at) AS date, ch.amt - COALESCE(pay.amt, 0) AS debt
+       FROM ch LEFT JOIN pay ON pay.pid = ch.pid AND pay.tid = ch.tid JOIN tournaments t ON t.id = ch.tid
+       WHERE ch.amt - COALESCE(pay.amt, 0) > 0 AND ch.tid <> ? AND (? IS NULL OR ch.pid = ?)
+       ORDER BY date, ch.tid`,
+    )
+    .all(opts.exceptTournamentId ?? -1, opts.playerId ?? null, opts.playerId ?? null) as {
+    pid: number;
+    tid: number;
+    name: string;
+    date: number;
+    debt: number;
+  }[];
+  const by = new Map<number, PlayerDebt[]>();
+  for (const r of rows) {
+    const list = by.get(r.pid) ?? [];
+    list.push({ tournamentId: r.tid, name: r.name, date: r.date, debt: r.debt });
+    by.set(r.pid, list);
+  }
+  return by;
+}
+
 /** Долги игрока по всем турнирам (кроме `exceptTournamentId`), старые сначала */
 export function playerDebts(db: DatabaseSync, playerId: number, exceptTournamentId?: number) {
-  const list = db
-    .prepare(
-      `SELECT DISTINCT t.id, t.name, COALESCE(t.started_at, t.created_at) AS date
-       FROM tournaments t
-       WHERE t.id <> ? AND (
-         EXISTS (SELECT 1 FROM events e JOIN participants p ON p.id = e.participant_id
-                 WHERE e.tournament_id = t.id AND p.player_id = ? AND e.price > 0 AND e.free = 0 AND e.cancelled_at IS NULL)
-         OR EXISTS (SELECT 1 FROM payments x WHERE x.tournament_id = t.id AND x.player_id = ? AND x.cancelled_at IS NULL))
-       ORDER BY date, t.id`,
-    )
-    .all(exceptTournamentId ?? -1, playerId, playerId) as { id: number; name: string; date: number }[];
-  const debts: PlayerDebt[] = [];
-  for (const t of list) {
-    const debt = tournamentCash(db, t.id).players.get(playerId)?.debt ?? 0;
-    if (debt > 0) debts.push({ tournamentId: t.id, name: t.name, date: t.date, debt });
-  }
+  const debts = debtsByPlayer(db, { exceptTournamentId, playerId }).get(playerId) ?? [];
   return { debts, total: debts.reduce((s, d) => s + d.debt, 0) };
 }
