@@ -5,6 +5,8 @@
 import type { DatabaseSync } from "node:sqlite";
 import { tournamentPoints, type TournamentKind } from "../rating/points";
 import { computeResults } from "../results";
+import type { ByMethod, CashSummary } from "../cash";
+import { tournamentCash } from "./cash";
 import { recomputeElo } from "./elo";
 import { currentRules, rulesById, type RulesVersion } from "./rules";
 import { audit } from "./sqlite";
@@ -72,6 +74,8 @@ export type HistoryItem = {
   players: number;
   winner: string | null;
   deal: boolean;
+  /** Касса: собрано и долги (null — денег в турнире не было) */
+  cash: { paid: number; debt: number } | null;
 };
 
 export function listHistory(db: DatabaseSync): HistoryItem[] {
@@ -115,6 +119,7 @@ export function listHistory(db: DatabaseSync): HistoryItem[] {
     players: r.mode === "players" || r.played > 0 ? r.played : r.entries,
     winner: r.status === "finished" ? r.winner : null,
     deal: r.deal === 1,
+    cash: cashBrief(db, r.id),
   }));
 }
 
@@ -135,11 +140,30 @@ export type ResultRow = {
   eloAfter: number | null;
 };
 
+/** Коротко о кассе турнира для списка; null — начислений и оплат не было */
+function cashBrief(db: DatabaseSync, id: number) {
+  const { summary: s } = tournamentCash(db, id);
+  return s.charged === 0 && s.paid === 0 && s.free === 0 ? null : { paid: s.paid, debt: s.debt };
+}
+
+/** Касса игрока в итогах турнира */
+export type CashRow = {
+  playerId: number;
+  name: string;
+  charged: number;
+  free: number;
+  paid: number;
+  byMethod: ByMethod;
+  debt: number;
+};
+
 export type TournamentDetails = HistoryItem & {
   counters: { entries: number; rebuys: number; addons: number; doubleAddons: number };
   results: ResultRow[];
   /** По какой версии правил посчитаны очки */
   rulesId: number | null;
+  /** Касса турнира по игрокам (docs/CASH.md); null — денег в турнире не было */
+  cashReport: { summary: CashSummary; players: CashRow[] } | null;
 };
 
 export function getTournamentDetails(db: DatabaseSync, id: number): TournamentDetails | null {
@@ -198,7 +222,28 @@ export function getTournamentDetails(db: DatabaseSync, id: number): TournamentDe
     counters: { entries: t.entries, rebuys: t.rebuys, addons: t.addons, doubleAddons: t.double_addons },
     results,
     rulesId: finished ? t.rules_id : null,
+    cashReport: detailsCash(db, id),
   };
+}
+
+/** Касса турнира по игрокам: должники сверху, потом по имени */
+function detailsCash(db: DatabaseSync, id: number) {
+  const { players, summary } = tournamentCash(db, id);
+  if (summary.charged === 0 && summary.paid === 0 && summary.free === 0) return null;
+  const names = db.prepare("SELECT name FROM players WHERE id = ?");
+  const rows = [...players].map(
+    ([playerId, c]): CashRow => ({
+      playerId,
+      name: (names.get(playerId) as { name: string } | undefined)?.name ?? "Игрок",
+      charged: c.charged,
+      free: c.free,
+      paid: c.paid,
+      byMethod: c.byMethod,
+      debt: c.debt,
+    }),
+  );
+  rows.sort((a, b) => b.debt - a.debt || a.name.localeCompare(b.name, "ru"));
+  return { summary, players: rows };
 }
 
 // ---------- Исправление итогов ----------

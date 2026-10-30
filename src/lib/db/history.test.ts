@@ -172,6 +172,24 @@ describe("история", () => {
     ]);
   });
 
+  it("касса в истории: собрано, по способам, кто должен (должники сверху)", () => {
+    expect(getTournamentDetails(db, tid())!.cashReport).toBeNull(); // цен не было — кассы нет
+    db.prepare("UPDATE events SET price = 1500 WHERE tournament_id = ?").run(tid());
+    player({ type: "pay", participantId: byName("Саша").id, amount: 1500, method: "cash" }, T0 + 1500);
+    player({ type: "pay", participantId: byName("Ира").id, amount: 1000, method: "transfer" }, T0 + 1600);
+    player({ type: "setFree", eventId: byName("Женя").cash.charges[0].eventId, free: true }, T0 + 1700);
+    playToEnd();
+    const d = getTournamentDetails(db, tid())!;
+    expect(d.cashReport!.summary).toMatchObject({ charged: 4500, free: 1500, paid: 2500, debt: 2000, debtors: 2 });
+    expect(d.cashReport!.players.map((p) => [p.name, p.debt])).toEqual([
+      ["Олег", 1500],
+      ["Ира", 500],
+      ["Женя", 0],
+      ["Саша", 0],
+    ]);
+    expect(listHistory(db)[0].cash).toEqual({ paid: 2500, debt: 2000 });
+  });
+
   it("турнир, который вели вручную, — со счётчиками, без игроков", () => {
     write((d) => {
       d.tournament.mode = "manual";

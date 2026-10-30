@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AdminShell } from "@/components/admin/AdminShell";
+import { CashLine } from "@/components/admin/Cash";
 import { Button, Card, inputClass } from "@/components/admin/ui";
+import { formatRub, PAY_METHOD_LABEL, PAY_METHODS } from "@/lib/cash";
 import type { HistoryItem, TournamentDetails } from "@/lib/db/history";
 import { formatEloDelta } from "@/lib/rating/elo";
 import { formatPlace } from "@/lib/results";
@@ -103,6 +105,12 @@ function History() {
                     {t.winner && ` · победитель ${t.winner}`}
                     {t.deal && " · дил"}
                   </div>
+                  {t.cash && (
+                    <div className="truncate text-xs tabular-nums text-slate-500">
+                      собрано {formatRub(t.cash.paid)}
+                      {t.cash.debt > 0 && <span className="text-red-300"> · долг {formatRub(t.cash.debt)}</span>}
+                    </div>
+                  )}
                 </div>
                 <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] ${st.cls}`}>{st.text}</span>
               </button>
@@ -300,6 +308,7 @@ function Details({ id, onBack }: { id: number; onBack: () => void }) {
                 : "Очки ещё не посчитаны — нажмите «Пересчитать» в разделе «Рейтинг»."}
             </div>
           )}
+          {t.cashReport && <CashReport report={t.cashReport} />}
           {flash && <div className="mt-3 text-sm text-emerald-300">{flash}</div>}
           {finished ? (
             <Button className="mt-4" onClick={startEdit}>
@@ -311,5 +320,56 @@ function Details({ id, onBack }: { id: number; onBack: () => void }) {
         </div>
       )}
     </Card>
+  );
+}
+
+/** Касса турнира: итог и по игрокам — кто сколько должен (долг принимают в карточке игрока) */
+function CashReport({ report }: { report: NonNullable<TournamentDetails["cashReport"]> }) {
+  const how = (byMethod: Record<string, number>) =>
+    PAY_METHODS.filter((m) => byMethod[m] > 0)
+      .map((m) => PAY_METHOD_LABEL[m].toLowerCase())
+      .join(", ");
+  return (
+    <div className="mt-6">
+      <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Касса</div>
+      <CashLine summary={report.summary} />
+      <table className="mt-2 w-full text-sm">
+        <thead>
+          <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500">
+            <th className="py-2">Игрок</th>
+            <th className="w-20 py-2 text-right">К оплате</th>
+            <th className="w-24 py-2 text-right">Оплачено</th>
+            <th className="w-20 py-2 text-right">Долг</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-white/[0.06]">
+          {report.players.map((p) => (
+            <tr key={p.playerId}>
+              <td className="py-2">
+                <Link href={`/admin/players/${p.playerId}`} className="font-semibold hover:text-amber-200">
+                  {p.name}
+                </Link>
+                {p.free > 0 && <span className="text-xs text-sky-300"> · бесплатно {formatRub(p.free)}</span>}
+              </td>
+              <td className="py-2 text-right tabular-nums">{formatRub(p.charged)}</td>
+              <td className="py-2 text-right tabular-nums">
+                {formatRub(p.paid)}
+                {p.paid > 0 && <div className="text-[11px] text-slate-500">{how(p.byMethod)}</div>}
+              </td>
+              <td
+                className={`py-2 text-right font-bold tabular-nums ${
+                  p.debt > 0 ? "text-red-300" : p.debt < 0 ? "text-amber-200" : "text-slate-500"
+                }`}
+              >
+                {p.debt > 0 ? formatRub(p.debt) : p.debt < 0 ? `+${formatRub(-p.debt)}` : "—"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {report.summary.debt > 0 && (
+        <div className="mt-2 text-xs text-slate-500">Долг принимают в карточке игрока (нажмите на имя) или когда он придёт на турнир.</div>
+      )}
+    </div>
   );
 }
