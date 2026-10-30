@@ -83,3 +83,15 @@ body {
   50% { transform: scale(1.025); filter: drop-shadow(0 0 60px rgb(252 211 77 / 0.3)); }
 }
 .animate-breathe { animation: breathe 6s ease-in-out infinite; }
+
+/* Плавная смена экранов рейтинга на табло */
+@keyframes fadein {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

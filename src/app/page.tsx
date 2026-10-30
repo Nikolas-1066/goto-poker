@@ -8,23 +8,7 @@ import { playBreakStart, playLevelChange, playTick, playWarning, unlockAudio } f
 import type { Tournament } from "@/lib/types";
 import { useTournament } from "@/lib/useTournament";
 import { useTvMode } from "@/lib/useTvMode";
-
-// Временные данные — заменятся системой рейтинга.
-const monthlyPlayers = [
-  { name: "Александр", points: 842 },
-  { name: "Михаил", points: 791 },
-  { name: "Дмитрий", points: 756 },
-  { name: "Сергей", points: 731 },
-  { name: "Андрей", points: 704 },
-];
-
-const allTimePlayers = [
-  { name: "Михаил", points: 4821 },
-  { name: "Александр", points: 4506 },
-  { name: "Сергей", points: 4201 },
-  { name: "Дмитрий", points: 3987 },
-  { name: "Андрей", points: 3844 },
-];
+import { RatingRotator } from "@/components/board/RatingRotator";
 
 /** Сколько секунд показывать заставку BLINDS UP после начала уровня */
 const BLINDS_UP_MS = 6000;
@@ -133,16 +117,7 @@ function BlindsLine({ level }: { level: { sb: number; bb: number; ante: number }
 
 export default function Home() {
   const { tournament, now, online, build, lanUrl } = useTournament();
-  const [showAllTime, setShowAllTime] = useState(false);
   const [soundOn, setSoundOn] = useState(false);
-
-  useEffect(() => {
-    const rotation = setInterval(() => {
-      setShowAllTime((value) => !value);
-    }, 5 * 60 * 1000);
-
-    return () => clearInterval(rotation);
-  }, []);
 
   const view = tournament ? boardView(tournament, now) : null;
   const status = tournament?.status ?? "idle";
@@ -257,8 +232,6 @@ export default function Home() {
           <MainBoard
             tournament={tournament}
             view={view}
-            players={showAllTime ? allTimePlayers : monthlyPlayers}
-            showAllTime={showAllTime}
           />
         )}
 
@@ -338,13 +311,9 @@ function RebuyAddonStatus({ tournament, view }: { tournament: Tournament; view: 
 function MainBoard({
   tournament,
   view,
-  players,
-  showAllTime,
 }: {
   tournament: Tournament | null;
   view: BoardView | null;
-  players: { name: string; points: number }[];
-  showAllTime: boolean;
 }) {
   const status = tournament?.status ?? "idle";
   const level = view?.activeLevel;
@@ -502,49 +471,9 @@ function MainBoard({
           </div>
         </Panel>
 
-        {/* LEADERBOARD */}
+        {/* РЕЙТИНГ: экраны по очереди (RATING.md, раздел 7) */}
         <Panel className="flex flex-1 flex-col p-5 xl:p-6">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <div className="text-[10px] font-bold tracking-[0.25em] text-amber-300 xl:text-xs">
-                ♛ ЛИДЕРЫ КЛУБА
-              </div>
-
-              <h2 className="mt-3 text-lg font-bold xl:text-xl">
-                {showAllTime ? "За всё время" : "Топ месяца"}
-              </h2>
-            </div>
-
-            <div className="rounded-full border border-white/10 px-2 py-1 text-[9px] text-slate-500">
-              ТОП 5
-            </div>
-          </div>
-
-          <div className="mt-5 flex flex-1 flex-col justify-around gap-3">
-            {players.map((player, index) => (
-              <div key={player.name} className="flex items-center gap-3">
-                <div
-                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${
-                    index === 0 ? "bg-amber-300/15 text-amber-300" : "bg-white/[0.04] text-slate-400"
-                  }`}
-                >
-                  {index + 1}
-                </div>
-
-                <div className="min-w-0 flex-1 truncate text-xs font-medium text-slate-200 xl:text-sm">
-                  {player.name}
-                </div>
-
-                <div className="text-xs font-bold tabular-nums text-slate-400 xl:text-sm">
-                  {player.points.toLocaleString("ru-RU")}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-5 border-t border-white/[0.07] pt-4 text-[9px] tracking-wide text-slate-600">
-            Рейтинг обновляется автоматически
-          </div>
+          <RatingRotator updatedAt={tournament?.updatedAt} />
         </Panel>
       </div>
     </div>

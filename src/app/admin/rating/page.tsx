@@ -823,7 +823,7 @@ function SettingsCard() {
 
   if (!s) return null;
   return (
-    <Card title="Периоды и финалы">
+    <Card title="Периоды, финалы и табло">
       <div className="space-y-3 text-sm">
         {(["seasonEnabled", "yearEnabled"] as const).map((k) => (
           <label key={k} className="flex items-center gap-2">
@@ -844,6 +844,24 @@ function SettingsCard() {
           ))}
         </div>
         <div className="text-xs text-slate-500">Для новых периодов. У идущего периода число меняется на его вкладке.</div>
+        <div className="grid grid-cols-2 gap-2 border-t border-white/[0.07] pt-3">
+          <Field label="Табло: секунд на экран">
+            <input
+              className={inputClass}
+              inputMode="numeric"
+              defaultValue={s.boardSeconds}
+              onBlur={(e) => Number(e.target.value) !== s.boardSeconds && save({ boardSeconds: Number(e.target.value) })}
+            />
+          </Field>
+          <Field label="Табло: строк в топе">
+            <input
+              className={inputClass}
+              inputMode="numeric"
+              defaultValue={s.boardTop}
+              onBlur={(e) => Number(e.target.value) !== s.boardTop && save({ boardTop: Number(e.target.value) })}
+            />
+          </Field>
+        </div>
         {msg && <div className="text-emerald-300">{msg}</div>}
       </div>
     </Card>
