@@ -12,6 +12,7 @@ import { phoneTail, searchPlayers, type Player } from "@/lib/players";
 import { formatSeat, MAX_SEATS, MAX_TABLES } from "@/lib/seating";
 import type { Tournament } from "@/lib/types";
 import { CashLine, CashPanel, EnterButtons, OldDebtBadge, OldDebtsPanel, PayBadge } from "./Cash";
+import { ReportBlock } from "./Report";
 import { Button, inputClass } from "./ui";
 
 type FinalInfo = ReturnType<typeof finalInfo>;
@@ -354,6 +355,9 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
 
       {finished && (
         <Section title="Итоги турнира">
+          <div className="py-2">
+            <ReportBlock remind />
+          </div>
           {participants
             .filter((p) => p.status !== "registered")
             .map((p) => (

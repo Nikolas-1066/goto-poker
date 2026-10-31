@@ -17,7 +17,7 @@ export function tournamentReport(db: DatabaseSync, tournamentId: number): Tourna
   const byPlayers = d.results.length > 0;
   const tournament: TournamentReport["tournament"] = {
     id: d.id,
-    name: d.name,
+    name: d.name.trim() || "Турнир",
     kindLabel: d.kind !== "regular" ? KIND_LABEL[d.kind as TournamentKind] : null,
     startedAt: d.startedAt,
     finishedAt: d.finishedAt,

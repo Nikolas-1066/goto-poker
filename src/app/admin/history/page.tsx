@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { CashLine } from "@/components/admin/Cash";
+import { ReportBlock } from "@/components/admin/Report";
 import { Button, Card, inputClass } from "@/components/admin/ui";
 import { formatRub, PAY_METHOD_LABEL, PAY_METHODS } from "@/lib/cash";
 import type { HistoryItem, TournamentDetails } from "@/lib/db/history";
@@ -311,9 +312,10 @@ function Details({ id, onBack }: { id: number; onBack: () => void }) {
           {t.cashReport && <CashReport report={t.cashReport} />}
           {flash && <div className="mt-3 text-sm text-emerald-300">{flash}</div>}
           {finished ? (
-            <Button className="mt-4" onClick={startEdit}>
-              Исправить итоги
-            </Button>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <ReportBlock key={t.id} tournamentId={t.id} />
+              <Button onClick={startEdit}>Исправить итоги</Button>
+            </div>
           ) : (
             <div className="mt-4 text-sm text-slate-500">Турнир не завершён — итоги пока предварительные.</div>
           )}
