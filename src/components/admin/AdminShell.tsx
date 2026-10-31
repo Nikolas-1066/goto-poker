@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import logo from "@/assets/logo.png";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, inputClass } from "./ui";
 
 // short — подпись на узком экране телефона, чтобы всё меню помещалось в одну строку
@@ -14,11 +14,18 @@ const NAV = [
   { href: "/admin/players", label: "Игроки", short: "Игроки" },
   { href: "/admin/history", label: "История", short: "История" },
   { href: "/admin/rating", label: "Рейтинг", short: "Рейтинг" },
+  { href: "/admin/stats", label: "Статистика", short: "Стат." },
 ];
 
 export function AdminShell({ children }: { children: ReactNode }) {
   const [admin, setAdmin] = useState<boolean | null>(null);
   const pathname = usePathname();
+  const nav = useRef<HTMLElement>(null);
+
+  // на узком экране меню прокручивается — открытый раздел показываем в видимой части
+  useEffect(() => {
+    nav.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [pathname, admin]);
 
   useEffect(() => {
     fetch("/api/auth", { cache: "no-store" })
@@ -45,11 +52,12 @@ export function AdminShell({ children }: { children: ReactNode }) {
               </span>
             </Link>
             {admin && (
-              <nav className="flex min-w-0 gap-0 overflow-x-auto sm:gap-1 whitespace-nowrap [scrollbar-width:none]">
+              <nav ref={nav} className="flex min-w-0 gap-0 overflow-x-auto sm:gap-1 whitespace-nowrap [scrollbar-width:none]">
                 {NAV.map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}
+                    aria-current={pathname === item.href ? "page" : undefined}
                     className={`rounded-lg px-1.5 py-1.5 text-[13px] sm:px-2 sm:text-sm md:px-3 ${
                       pathname === item.href
                         ? "bg-white/[0.08] text-white"
