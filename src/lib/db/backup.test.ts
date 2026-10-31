@@ -4,7 +4,7 @@ import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { applyAction } from "../clock";
-import { backupDatabase, backupsDir, finishedNow, KEEP_BACKUPS, pruneBackups } from "./backup";
+import { backupDatabase, backupsDir, copyForDownload, finishedNow, KEEP_BACKUPS, pruneBackups } from "./backup";
 import { loadState, openDatabase, openStore, transaction, writeState } from "./sqlite";
 
 const NOW = new Date(2026, 9, 29, 20, 30, 5).getTime(); // 29.10.2026 20:30:05 по местному времени
@@ -119,5 +119,24 @@ describe("когда делать копию после изменения", () 
     expect(finishedNow(running, finished)).toBe(true);
     expect(finishedNow(finished, finished)).toBe(false); // правки после завершения — без новой копии
     expect(finishedNow(state, running)).toBe(false);
+  });
+});
+
+describe("копия для скачивания", () => {
+  it("целая база, временный файл удалён", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "goto-dl-"));
+    const { db } = openStore(dir);
+    db.prepare("INSERT INTO players (name, phone, created_at, updated_at) VALUES ('Саша', '+79000000000', 1, 1)").run();
+    const buf = copyForDownload(db, dir);
+    expect(buf.subarray(0, 15).toString()).toBe("SQLite format 3");
+    expect(fs.readdirSync(path.join(dir, "backups")).filter((f) => f.startsWith("download-"))).toEqual([]);
+    const file = path.join(dir, "check.db");
+    fs.writeFileSync(file, buf);
+    const { DatabaseSync } = process.getBuiltinModule("node:sqlite");
+    const copy = new DatabaseSync(file);
+    expect((copy.prepare("SELECT name FROM players").get() as { name: string }).name).toBe("Саша");
+    copy.close();
+    db.close();
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });

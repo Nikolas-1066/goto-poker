@@ -53,3 +53,20 @@ export function pruneBackups(dir: string, keep: number) {
 export function finishedNow(prev: Db, next: Db) {
   return prev.tournament.status !== "finished" && next.tournament.status === "finished";
 }
+
+/**
+ * Копия всей базы одним файлом для скачивания (кнопка в «Статистике»). Делается так же, как резервная
+ * (VACUUM INTO — целая и самостоятельная), во временный файл, который сразу удаляется.
+ * Вызывать вне транзакции.
+ */
+export function copyForDownload(db: DatabaseSync, dataDir: string, now = Date.now()): Buffer {
+  const dir = backupsDir(dataDir);
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, `download-${now}-${process.pid}.db`);
+  try {
+    db.prepare("VACUUM INTO ?").run(file);
+    return fs.readFileSync(file);
+  } finally {
+    fs.rmSync(file, { force: true });
+  }
+}

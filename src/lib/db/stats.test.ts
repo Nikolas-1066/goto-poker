@@ -9,6 +9,7 @@ import type { Db, TournamentAction } from "../types";
 import { addPayment } from "./cash";
 import { createPlayer } from "./players";
 import { openStore, transaction, writeState } from "./sqlite";
+import { exportSheets } from "./export";
 import { loadStatsData } from "./stats";
 import { applyPlayerAction, archiveCurrentIfUsed, currentTournament, listParticipants, type PlayerAction } from "./tournament";
 
@@ -95,5 +96,21 @@ describe("данные статистики из базы", () => {
     expect(oct).toMatchObject({ paid: 1500, debt: 1000, free: 1500 }); // Саша должен 1 000 за аддон
     expect(oct.weekdays[4]).toMatchObject({ tournaments: 1, avgPlayers: 3, avgPaid: 4000 });
     expect(computeStats(data, periodRange("2026-11")!)).toMatchObject({ paid: 2500, tournaments: 0 });
+
+    // выгрузка в Excel за октябрь
+    const sheets = exportSheets(db, periodRange("2026-10")!, "Октябрь 2026");
+    expect(sheets.map((x) => x.name)).toEqual(["Сводка", "Турниры", "Места", "Касса", "Долги", "Игроки", "Рейтинг"]);
+    const sheet = (name: string) => sheets.find((x) => x.name === name)!.rows;
+    expect(sheet("Сводка")[1]).toEqual(["Собрано, ₽", 1500]);
+    expect(sheet("Турниры")).toHaveLength(2); // заголовок + один завершённый турнир (брошенный не входит)
+    expect(sheet("Турниры")[1].slice(4)).toEqual([3, 1, 1, 5000, 4000, 1000]);
+    expect(sheet("Места").slice(1).map((r) => [r[1], r[2], r[4]])).toEqual([
+      [1, "Саша", 3],
+      [2, "Ира", 0],
+      [3, "Олег", 0],
+    ]);
+    expect(sheet("Касса")[1].slice(1)).toEqual(["Саша", expect.stringContaining("Стандарт"), 1500, "Наличные"]);
+    expect(sheet("Долги").slice(1)).toEqual([["Саша", expect.any(String), 1000]]);
+    expect(sheet("Игроки").find((r) => r[0] === "Саша")!.slice(2, 7)).toEqual([1, 1, 3, 1500, 1000]);
   });
 });

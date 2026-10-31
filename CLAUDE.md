@@ -59,6 +59,11 @@ Telegram Mini App для игроков. Архитектуру делать т�
 - Статистика (`docs/STATS.md`): `/admin/stats` — месяцы / годы / всё время: деньги (собрано по дню оплаты,
   долги и бесплатно по турнирам периода), турниры и игроки, новые игроки, топы, дни недели.
   Подсчёт — чистые функции `src/lib/stats.ts`, данные — `src/lib/db/stats.ts`, API — `/api/stats?period=`.
+  Там же (только владельцу): «Excel» — `/api/stats/export?period=` (`src/lib/db/export.ts`, запись .xlsx без библиотек —
+  `src/lib/xlsx.ts`) и «Копия базы» — `/api/backup` (`copyForDownload`: VACUUM INTO во временный файл).
+- Отчёт владельцу после турнира: `src/lib/report.ts` (сдвиг мест, текст), `src/lib/db/report.ts`, `/api/report`;
+  UI `src/components/admin/Report.tsx` (текст + «Скопировать» работает и по http, напоминание до копирования)
+  и `ReportImages.tsx` (3 картинки на canvas без кассы). В карточке «Игроки» после завершения и в «Истории».
 
 ## Стек и важные особенности
 

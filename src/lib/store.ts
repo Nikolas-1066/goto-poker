@@ -7,7 +7,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
-import { backupDatabase, finishedNow, type BackupReason } from "./db/backup";
+import { backupDatabase, copyForDownload, finishedNow, type BackupReason } from "./db/backup";
 import { freshDb, normalizeLegacy, openStore, transaction, writeState } from "./db/sqlite";
 import type { Db } from "./types";
 
@@ -150,4 +150,15 @@ export async function takeOwnerResetRequest() {
   } catch {
     return false;
   }
+}
+
+/** Копия всей базы для скачивания — в общей очереди записи, вне транзакции (VACUUM INTO) */
+export function databaseCopy(): Promise<Buffer> {
+  const run = store.queue.then(async () => {
+    await load();
+    if (!store.sqlite) throw new Error("База недоступна: программа работает в запасном режиме (см. журнал сервера)");
+    return copyForDownload(store.sqlite, DATA_DIR);
+  });
+  store.queue = run.catch(() => {});
+  return run;
 }

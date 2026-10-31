@@ -95,6 +95,20 @@ function Stats({ onLocked }: { onLocked: () => void }) {
             ))}
           </select>
         )}
+        <div className="ml-auto flex flex-wrap gap-2">
+          {/* обычные ссылки: файл скачивается с cookie админа и владельца */}
+          {(tab === "all" || key) && (
+            <a
+              href={`/api/stats/export?period=${encodeURIComponent(tab === "all" ? "all" : key)}`}
+              className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-200 hover:bg-white/[0.05]"
+            >
+              ⬇ Excel · {tab === "all" ? "всё время" : periodLabel(key)}
+            </a>
+          )}
+          <a href="/api/backup" className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-200 hover:bg-white/[0.05]">
+            ⬇ Копия базы
+          </a>
+        </div>
       </div>
 
       {error && <div className="text-sm text-red-300">{error}</div>}
