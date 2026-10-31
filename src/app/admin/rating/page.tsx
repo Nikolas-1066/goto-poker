@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { OwnerBar, OwnerLogin, useOwner } from "@/components/admin/Owner";
+import { RatingImageButton } from "@/components/admin/RatingImage";
 import { Button, Card, Field, inputClass } from "@/components/admin/ui";
 import {
   KIND_LABEL,
@@ -558,6 +559,15 @@ function OpenPeriod({
   return (
     <div className="mx-auto grid max-w-5xl grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[1.5fr_1fr]">
       <Card title={`${KIND_TAB[kind]} · ${p.name}`} action={<span className="text-xs text-slate-500">с {fmtDate(p.startedAt)}</span>}>
+        <div className="mb-3">
+          <RatingImageButton
+            title={`Рейтинг · ${p.name}`}
+            fileName={`Рейтинг ${p.name}.png`.replace(/[\\/:*?"<>|]+/g, "_")}
+            rows={view.standings}
+            zoneN={p.finalistsN}
+            finalistIds={finalistIds}
+          />
+        </div>
         <StandingsTable rows={view.standings} zoneN={p.finalistsN} finalistIds={finalistIds} />
       </Card>
 
