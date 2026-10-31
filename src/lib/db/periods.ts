@@ -24,7 +24,7 @@ export type Period = {
 export const PERIOD_LABEL: Record<PeriodKind, string> = { month: "Месяц", season: "Сезон", year: "Год" };
 
 /** Виды турниров, которые идут в рейтинг этого вида */
-const KINDS: Record<PeriodKind | "all", string[]> = {
+export const KINDS: Record<PeriodKind | "all", string[]> = {
   month: ["regular"],
   season: ["regular", "month_final"],
   year: ["regular", "month_final", "season_final"],
