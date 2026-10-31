@@ -98,8 +98,11 @@ Telegram Mini App для игроков. Архитектуру делать т�
 - Логика часов — чистые функции в `src/lib/clock.ts` (`resolveClock`, `applyAction`, `boardView`),
   общие для сервера и клиента. Новую бизнес-логику (рейтинг, итоги) тоже делать чистыми функциями
   отдельно от UI и покрывать тестами.
-- Авторизация: `src/lib/auth.ts` — один пароль из env, cookie `goto_admin` (HMAC).
-  Роли (админ турнира / владелец) — в планах, см. ROADMAP.
+- Авторизация: `src/lib/auth.ts` — пароль админки из env, cookie `goto_admin` (HMAC).
+  **Пароль владельца** (`src/lib/db/owner.ts`, `src/lib/owner.ts`, `/api/owner`, UI `src/components/admin/Owner.tsx`):
+  открывает «Статистику» и изменение правил рейтинга (PUT rules/settings, POST rescore — `isOwner` + `ownerRequired`).
+  Хранится в `settings` (ключ `owner`, соль + scrypt), задаётся в админке при первом входе, cookie `goto_owner` (12 ч).
+  Сброс: файл `DATA_DIR/reset-owner-password.txt` (на ноутбуке — `RESET-OWNER-PASSWORD.bat`).
 - Дизайн: тёмный фон `#080e15`, панели `#101923` с рамкой `white/[0.09]`, акцент `amber-300`,
   крупные цифры `tabular-nums`. Компоненты админки — `src/components/admin/ui.tsx`.
   Логотип — `src/assets/logo.png`.

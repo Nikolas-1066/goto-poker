@@ -6,6 +6,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AdminShell } from "@/components/admin/AdminShell";
+import { OwnerGate } from "@/components/admin/Owner";
 import { Card } from "@/components/admin/ui";
 import { formatRub, PAY_METHOD_LABEL, PAY_METHODS } from "@/lib/cash";
 import { periodLabel, WEEKDAYS, type BreakdownRow, type StatsSummary, type TopRow } from "@/lib/stats";
@@ -13,7 +14,8 @@ import { periodLabel, WEEKDAYS, type BreakdownRow, type StatsSummary, type TopRo
 export default function StatsPage() {
   return (
     <AdminShell>
-      <Stats />
+      {/* только владельцу: пароль владельца (docs/STATS.md) */}
+      <OwnerGate>{(relock) => <Stats onLocked={relock} />}</OwnerGate>
     </AdminShell>
   );
 }
@@ -29,7 +31,7 @@ const TABS: { id: Tab; label: string }[] = [
 
 const num = (n: number) => String(n).replace(".", ",");
 
-function Stats() {
+function Stats({ onLocked }: { onLocked: () => void }) {
   const [tab, setTab] = useState<Tab>("month");
   /** Выбранный месяц / год; пусто — самый свежий */
   const [key, setKey] = useState("");
@@ -45,6 +47,7 @@ function Stats() {
       const res = await fetch(`/api/stats?period=${encodeURIComponent(period || "all")}`, { cache: "no-store" });
       const d = await res.json();
       if (!alive) return;
+      if (res.status === 403) return onLocked(); // вход владельца истёк
       if (!res.ok) return setError(d.error ?? "Не удалось загрузить статистику");
       setError("");
       if (!period && tab !== "all") {
@@ -56,7 +59,7 @@ function Stats() {
     return () => {
       alive = false;
     };
-  }, [period, tab]);
+  }, [period, tab, onLocked]);
 
   const options = tab === "month" ? (data?.months ?? []) : tab === "year" ? (data?.years ?? []) : [];
   const s = data && data.period === (period || "all") ? data.summary : null;

@@ -1,5 +1,6 @@
 import { connection, type NextRequest } from "next/server";
 import { badRequest, isAdmin, unauthorized } from "@/lib/auth";
+import { isOwner, ownerRequired } from "@/lib/owner";
 import { currentRules, saveRules } from "@/lib/db/rules";
 import { withDatabase } from "@/lib/store";
 
@@ -18,6 +19,7 @@ export async function GET(req: NextRequest) {
 // Сохранить правила (новой версией): { rules }
 export async function PUT(req: NextRequest) {
   if (!isAdmin(req)) return unauthorized();
+  if (!(await isOwner(req))) return ownerRequired();
   try {
     const body = (await req.json().catch(() => null)) as { rules?: unknown } | null;
     const result = await withDatabase((db) => saveRules(db, body?.rules));

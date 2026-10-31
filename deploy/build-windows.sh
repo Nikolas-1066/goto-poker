@@ -44,7 +44,7 @@ echo "$NODE_SUM  $CACHE/$NODE_ZIP" | shasum -a 256 -c - >/dev/null || { rm -f "$
 unzip -q -j -o "$CACHE/$NODE_ZIP" '*/node.exe' -d "$SYS"
 
 echo "--- Скрипты запуска"
-cp deploy/windows/INSTALL.bat deploy/windows/START.bat deploy/windows/STOP.bat deploy/windows/FIX-FIREWALL.bat deploy/windows/DIAGNOSE.bat "$OUT/"
+cp deploy/windows/INSTALL.bat deploy/windows/START.bat deploy/windows/STOP.bat deploy/windows/FIX-FIREWALL.bat deploy/windows/DIAGNOSE.bat deploy/windows/RESET-OWNER-PASSWORD.bat "$OUT/"
 cp deploy/windows/goto.ico "$SYS/"
 # .ps1 и инструкция: UTF-8 с BOM + переводы строк Windows (иначе кириллица ломается)
 for f in deploy/windows/scripts/*.ps1; do

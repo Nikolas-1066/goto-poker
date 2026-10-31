@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { AdminShell } from "@/components/admin/AdminShell";
+import { OwnerBar, OwnerLogin, useOwner } from "@/components/admin/Owner";
 import { Button, Card, Field, inputClass } from "@/components/admin/ui";
 import {
   KIND_LABEL,
@@ -65,6 +66,9 @@ function fromDraft(d: Draft): { rules: RatingRules | null; error: string } {
 }
 
 function RulesTab() {
+  // менять правила, настройки и «Пересчитать» — только владельцу; смотреть — всем
+  const owner = useOwner();
+  const locked = !owner.state?.owner;
   const [saved, setSaved] = useState<{ id: number; rules: RatingRules } | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
@@ -128,6 +132,14 @@ function RulesTab() {
 
   return (
     <div className="mx-auto grid max-w-5xl grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[1.2fr_1fr]">
+      <div className="lg:col-span-2">
+        {owner.state && locked ? (
+          <OwnerLogin state={owner.state} note="Смотреть правила могут все, а менять их — только владелец." onDone={owner.refresh} />
+        ) : owner.state ? (
+          <OwnerBar onChanged={owner.refresh} />
+        ) : null}
+      </div>
+      <fieldset disabled={locked} className="contents">
       <Card title={`Правила начисления очков · версия ${saved.id}`}>
         <div className="space-y-5">
           <section>
@@ -196,6 +208,9 @@ function RulesTab() {
       <div className="space-y-5">
         <SettingsCard />
         <Rescore rulesId={saved.id} />
+      </div>
+      </fieldset>
+      <div className="lg:col-start-2">
         <Calculator rules={parsed.rules ?? saved.rules} draftChanged={dirty} />
       </div>
     </div>

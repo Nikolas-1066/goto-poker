@@ -1,5 +1,6 @@
 import { connection, type NextRequest } from "next/server";
 import { badRequest, isAdmin, unauthorized } from "@/lib/auth";
+import { isOwner, ownerRequired } from "@/lib/owner";
 import { outdatedCount, rescoreAll } from "@/lib/db/history";
 import { updateDb, withDatabase } from "@/lib/store";
 
@@ -17,6 +18,7 @@ export async function GET(req: NextRequest) {
 // «Пересчитать»: очки всех завершённых турниров по текущим правилам
 export async function POST(req: NextRequest) {
   if (!isAdmin(req)) return unauthorized();
+  if (!(await isOwner(req))) return ownerRequired();
   try {
     let tournaments = 0;
     // через updateDb — табло и админка увидят обновление

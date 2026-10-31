@@ -14,6 +14,8 @@ import type { Db } from "./types";
 const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "data");
 // Имя файла — строкой прямо здесь: так сборщик понимает путь и не тащит в пакет весь проект.
 const JSON_FILE = path.join(DATA_DIR, "goto-poker.json");
+// Забыли пароль владельца: на ноутбуке СБРОС-ПАРОЛЯ-ВЛАДЕЛЬЦА создаёт этот файл (см. README-RU.txt)
+const OWNER_RESET_FILE = path.join(DATA_DIR, "reset-owner-password.txt");
 
 type StoreGlobal = {
   db: Db | null;
@@ -138,4 +140,14 @@ async function persistJson(db: Db) {
   const tmp = `${JSON_FILE}.${process.pid}.tmp`;
   await fs.writeFile(tmp, JSON.stringify(db, null, 2), "utf8");
   await fs.rename(tmp, JSON_FILE);
+}
+
+/** Есть файл-сброс пароля владельца? Удаляет его и возвращает true (пароль сбрасывает вызывающий) */
+export async function takeOwnerResetRequest() {
+  try {
+    await fs.unlink(OWNER_RESET_FILE);
+    return true;
+  } catch {
+    return false;
+  }
 }

@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { AUTH_COOKIE, checkPassword, currentToken, isAdmin, isHttps } from "@/lib/auth";
+import { OWNER_COOKIE } from "@/lib/owner";
 
 export async function GET(req: NextRequest) {
   return Response.json({ admin: isAdmin(req) }, { headers: { "Cache-Control": "no-store" } });
@@ -31,5 +32,7 @@ export async function POST(req: NextRequest) {
 export async function DELETE() {
   const res = Response.json({ admin: false });
   res.headers.append("Set-Cookie", `${AUTH_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+  // выход из админки закрывает и режим владельца
+  res.headers.append("Set-Cookie", `${OWNER_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
   return res;
 }
