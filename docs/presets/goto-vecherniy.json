@@ -1,0 +1,252 @@
+{
+ "name": "ГОТО Вечерний",
+ "description": "Старт 19:00. Re-entry (после потери всех фишек) до конца 2-го перерыва, аддоны на 2-м перерыве ~21:25, дальше на вылет. Набор фишек: 100/500/1к/5к/25к/100к",
+ "startingStack": 30000,
+ "rebuyStack": 30000,
+ "addonStack": 30000,
+ "doubleAddonStack": 60000,
+ "rebuyUntilLevel": 9,
+ "addonUntilLevel": 9,
+ "prices": {
+  "entry": 0,
+  "reentry": 0,
+  "addon": 0,
+  "doubleAddon": 0
+ },
+ "steps": [
+  {
+   "id": "l1",
+   "kind": "level",
+   "sb": 100,
+   "bb": 200,
+   "ante": 200,
+   "minutes": 15
+  },
+  {
+   "id": "l2",
+   "kind": "level",
+   "sb": 200,
+   "bb": 300,
+   "ante": 300,
+   "minutes": 15
+  },
+  {
+   "id": "l3",
+   "kind": "level",
+   "sb": 200,
+   "bb": 400,
+   "ante": 400,
+   "minutes": 15
+  },
+  {
+   "id": "l4",
+   "kind": "level",
+   "sb": 300,
+   "bb": 600,
+   "ante": 600,
+   "minutes": 15
+  },
+  {
+   "id": "b4",
+   "kind": "break",
+   "minutes": 10,
+   "note": "Перерыв"
+  },
+  {
+   "id": "l5",
+   "kind": "level",
+   "sb": 400,
+   "bb": 800,
+   "ante": 800,
+   "minutes": 15
+  },
+  {
+   "id": "l6",
+   "kind": "level",
+   "sb": 500,
+   "bb": 1000,
+   "ante": 1000,
+   "minutes": 15
+  },
+  {
+   "id": "l7",
+   "kind": "level",
+   "sb": 600,
+   "bb": 1200,
+   "ante": 1200,
+   "minutes": 15
+  },
+  {
+   "id": "l8",
+   "kind": "level",
+   "sb": 800,
+   "bb": 1600,
+   "ante": 1600,
+   "minutes": 15
+  },
+  {
+   "id": "l9",
+   "kind": "level",
+   "sb": 1000,
+   "bb": 2000,
+   "ante": 2000,
+   "minutes": 15
+  },
+  {
+   "id": "b9",
+   "kind": "break",
+   "minutes": 15,
+   "note": "Аддоны · последние входы · убираем фишки 100 и 500. Дальше — на вылет"
+  },
+  {
+   "id": "l10",
+   "kind": "level",
+   "sb": 2000,
+   "bb": 3000,
+   "ante": 3000,
+   "minutes": 15
+  },
+  {
+   "id": "l11",
+   "kind": "level",
+   "sb": 2000,
+   "bb": 4000,
+   "ante": 4000,
+   "minutes": 15
+  },
+  {
+   "id": "l12",
+   "kind": "level",
+   "sb": 3000,
+   "bb": 5000,
+   "ante": 5000,
+   "minutes": 15
+  },
+  {
+   "id": "l13",
+   "kind": "level",
+   "sb": 3000,
+   "bb": 6000,
+   "ante": 6000,
+   "minutes": 15
+  },
+  {
+   "id": "l14",
+   "kind": "level",
+   "sb": 4000,
+   "bb": 8000,
+   "ante": 8000,
+   "minutes": 12
+  },
+  {
+   "id": "l15",
+   "kind": "level",
+   "sb": 5000,
+   "bb": 10000,
+   "ante": 10000,
+   "minutes": 12
+  },
+  {
+   "id": "b15",
+   "kind": "break",
+   "minutes": 10,
+   "note": "Перерыв"
+  },
+  {
+   "id": "l16",
+   "kind": "level",
+   "sb": 6000,
+   "bb": 12000,
+   "ante": 12000,
+   "minutes": 12
+  },
+  {
+   "id": "l17",
+   "kind": "level",
+   "sb": 8000,
+   "bb": 16000,
+   "ante": 16000,
+   "minutes": 12
+  },
+  {
+   "id": "l18",
+   "kind": "level",
+   "sb": 10000,
+   "bb": 20000,
+   "ante": 20000,
+   "minutes": 12
+  },
+  {
+   "id": "l19",
+   "kind": "level",
+   "sb": 15000,
+   "bb": 30000,
+   "ante": 30000,
+   "minutes": 10
+  },
+  {
+   "id": "l20",
+   "kind": "level",
+   "sb": 20000,
+   "bb": 40000,
+   "ante": 40000,
+   "minutes": 10
+  },
+  {
+   "id": "l21",
+   "kind": "level",
+   "sb": 25000,
+   "bb": 50000,
+   "ante": 50000,
+   "minutes": 10
+  },
+  {
+   "id": "l22",
+   "kind": "level",
+   "sb": 30000,
+   "bb": 60000,
+   "ante": 60000,
+   "minutes": 10
+  },
+  {
+   "id": "l23",
+   "kind": "level",
+   "sb": 40000,
+   "bb": 80000,
+   "ante": 80000,
+   "minutes": 10
+  },
+  {
+   "id": "l24",
+   "kind": "level",
+   "sb": 50000,
+   "bb": 100000,
+   "ante": 100000,
+   "minutes": 10
+  },
+  {
+   "id": "l25",
+   "kind": "level",
+   "sb": 60000,
+   "bb": 120000,
+   "ante": 120000,
+   "minutes": 10
+  },
+  {
+   "id": "l26",
+   "kind": "level",
+   "sb": 80000,
+   "bb": 160000,
+   "ante": 160000,
+   "minutes": 10
+  },
+  {
+   "id": "l27",
+   "kind": "level",
+   "sb": 100000,
+   "bb": 200000,
+   "ante": 200000,
+   "minutes": 10
+  }
+ ]
+}
