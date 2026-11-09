@@ -70,6 +70,25 @@ function Stop-Kiosk {
         ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 }
 
+# Какой процесс слушает порт (или $null)
+function Get-PortOwner($port) {
+    try {
+        $c = Get-NetTCPConnection -LocalPort ([int]$port) -State Listen -ErrorAction Stop | Select-Object -First 1
+        if ($c) { return Get-Process -Id $c.OwningProcess -ErrorAction SilentlyContinue }
+    } catch { }
+    return $null
+}
+
+# Остановить табло, запущенное из ДРУГОЙ папки (старая копия, старый ярлык автозапуска)
+function Stop-ForeignBoard($port) {
+    $owner = Get-PortOwner $port
+    if ($owner -and $owner.ProcessName -eq 'node' -and $owner.Path -ne $NodeExe) {
+        Write-Host "  Найдено табло из другой папки ($($owner.Path)) — останавливаю." -ForegroundColor DarkYellow
+        Stop-Process -Id $owner.Id -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 1
+    }
+}
+
 function Stop-Server {
     if (Test-Path $PidFile) {
         $procId = Get-Content $PidFile -ErrorAction SilentlyContinue
@@ -80,6 +99,9 @@ function Stop-Server {
     Get-Process node -ErrorAction SilentlyContinue |
         Where-Object { $_.Path -eq $NodeExe } |
         Stop-Process -Force -ErrorAction SilentlyContinue
+    # И любое табло (node.exe), которое держит наш порт — например, из старой папки
+    $owner = Get-PortOwner (Read-Settings).PORT
+    if ($owner -and $owner.ProcessName -eq 'node') { Stop-Process -Id $owner.Id -Force -ErrorAction SilentlyContinue }
 }
 
 # ---------- Файрвол ----------

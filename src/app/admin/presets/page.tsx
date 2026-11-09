@@ -333,6 +333,14 @@ function PresetForm({
               onChange={(v) => set({ prices: { ...draft.prices, doubleAddon: v } })}
             />
           </Field>
+          <Field label="Бесплатный вход до (пусто — нет)">
+            <input
+              className={inputClass}
+              type="time"
+              value={draft.prices.freeEntryUntil ?? ""}
+              onChange={(e) => set({ prices: { ...draft.prices, freeEntryUntil: e.target.value } })}
+            />
+          </Field>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
           <Field label="Ребаи до конца уровня (0 — нет)">

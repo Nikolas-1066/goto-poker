@@ -272,6 +272,12 @@ export type BoardView = ClockView & {
   addonOpen: boolean;
   /** Перерыв для аддона ещё впереди */
   addonUpcoming: boolean;
+  /**
+   * «Дозапись» для админа: для игроков уже закрыто, но админ ещё может внести
+   * re-entry / аддон, если не успел, — до конца первого уровня после закрытия.
+   */
+  rebuyLate: boolean;
+  addonLate: boolean;
 };
 
 export function boardView(t: Tournament, now: number): BoardView {
@@ -330,6 +336,10 @@ export function boardView(t: Tournament, now: number): BoardView {
   const addonOpen = !!s && !finished && addonLevel > 0 && step?.kind === "break" && periodLevel === addonLevel;
   const addonUpcoming =
     !!s && !finished && addonLevel > 0 && !addonOpen && (periodLevel < addonLevel || (periodLevel === addonLevel && step?.kind !== "break"));
+  // Дозапись: первый игровой уровень после закрытия (уровень N+1)
+  const rebuyLevel = s?.rebuyUntilLevel ?? 0;
+  const rebuyLate = !!s && !finished && rebuyLevel > 0 && !rebuyOpen && step?.kind === "level" && periodLevel === rebuyLevel + 1;
+  const addonLate = !!s && !finished && addonLevel > 0 && !addonOpen && step?.kind === "level" && periodLevel === addonLevel + 1;
   const avgStack = t.playersLeft > 0 && totalChips > 0 ? Math.round(totalChips / t.playersLeft) : null;
 
   return {
@@ -346,6 +356,8 @@ export function boardView(t: Tournament, now: number): BoardView {
     rebuyOpen,
     addonOpen,
     addonUpcoming,
+    rebuyLate,
+    addonLate,
   };
 }
 

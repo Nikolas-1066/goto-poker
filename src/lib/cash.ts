@@ -70,6 +70,21 @@ export type CashSummary = {
 export const priceOf = (prices: Prices | undefined, type: ChargeType) =>
   !prices ? 0 : type === "double_addon" ? prices.doubleAddon : prices[type];
 
+/**
+ * Бесплатный первый вход (акция «пришёл в первый час — вход бесплатно»): действует, пока время
+ * на часах ноутбука не дошло до `until` («ЧЧ:ММ»). Окно — 12 часов до этого времени, чтобы
+ * вход после полуночи (01:00 при акции «до 20:00») не считался бесплатным.
+ */
+export function isFreeEntryTime(until: string | undefined, now: number): boolean {
+  const m = /^(\d{2}):(\d{2})$/.exec(until ?? "");
+  if (!m) return false;
+  const d = new Date(now);
+  const deadline = new Date(d.getFullYear(), d.getMonth(), d.getDate(), Number(m[1]), Number(m[2])).getTime();
+  // ближайший момент «ЧЧ:ММ», который ещё не наступил
+  const next = deadline > now ? deadline : deadline + 24 * 3_600_000;
+  return next - now <= 12 * 3_600_000;
+}
+
 const noMethods = (): ByMethod => ({ cash: 0, card: 0, transfer: 0 });
 
 /** Касса по игрокам турнира */

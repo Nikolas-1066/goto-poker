@@ -45,18 +45,18 @@ function SideCard({
   return (
     <Panel className="flex min-h-0 flex-1 flex-col items-center justify-center p-5 text-center xl:p-6">
       <div className="flex items-center justify-center gap-3">
-        <span className="text-xl text-amber-300">{icon}</span>
+        <span className="tv-lg text-amber-300">{icon}</span>
 
-        <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 xl:text-xs">
+        <span className="tv-sm font-bold uppercase tracking-[0.18em] text-slate-300">
           {label}
         </span>
       </div>
 
-      <div className="mt-5 whitespace-nowrap text-4xl font-black tabular-nums tracking-tight xl:text-5xl 2xl:text-6xl">
+      <div className="mt-3 whitespace-nowrap text-[clamp(2.25rem,3.9vw,5.5rem)] font-black leading-none tabular-nums tracking-tight">
         {value}
       </div>
 
-      <div className="mt-2 text-xs text-slate-500 xl:text-sm">
+      <div className="tv-sm mt-3 text-slate-400">
         {description}
       </div>
     </Panel>
@@ -187,7 +187,7 @@ export default function Home() {
   const footer = (
     <>
       {tournament?.tickerOn && tournament.ticker.trim() && <Ticker text={tournament.ticker} />}
-      <footer className="flex items-center justify-between gap-4 pt-5 text-[9px] tracking-[0.2em] text-slate-600">
+      <footer className="flex items-center justify-between gap-4 pt-4 tv-xs tracking-[0.2em] text-slate-500">
         <span>
           ГОТО ПОКЕР
           {!online && <span className="ml-3 text-red-400">НЕТ СВЯЗИ С СЕРВЕРОМ</span>}
@@ -223,7 +223,7 @@ export default function Home() {
         <div className="absolute bottom-[-40%] right-[-10%] h-[70%] w-[50%] rounded-full bg-blue-500/[0.04] blur-[150px]" />
       </div>
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-[1920px] flex-col px-5 py-5 md:px-8 md:py-6 xl:px-10 xl:py-7">
+      <div className="relative mx-auto flex min-h-screen w-full max-w-[1920px] flex-col lg:h-screen lg:overflow-hidden px-5 py-5 md:px-8 md:py-6 xl:px-10 xl:py-7">
         <Header name={tournament?.name} />
 
         {tournament && view && isBreak ? (
@@ -252,7 +252,7 @@ export default function Home() {
 
 function Header({ name }: { name?: string }) {
   return (
-    <header className="flex items-center justify-between border-b border-white/10 pb-5">
+    <header className="flex items-center justify-between border-b border-white/10 pb-4">
       <div className="flex items-center gap-3 xl:gap-4">
         <Image src={logo} alt="ГОТО ПОКЕР" priority className="h-12 w-auto xl:h-16" />
 
@@ -261,18 +261,18 @@ function Header({ name }: { name?: string }) {
             ГОТО <span className="text-amber-300">ПОКЕР</span>
           </h1>
 
-          <p className="mt-1 text-[9px] tracking-[0.32em] text-slate-500 xl:text-[10px]">
+          <p className="tv-xs mt-1 tracking-[0.32em] text-slate-500">
             POKER CLUB · TOURNAMENT CONTROL
           </p>
         </div>
       </div>
 
       <div className="text-right">
-        <p className="text-[9px] uppercase tracking-[0.25em] text-slate-500 xl:text-[10px]">
+        <p className="tv-xs uppercase tracking-[0.25em] text-slate-500">
           Текущий турнир
         </p>
 
-        <p className="mt-1 text-sm font-semibold text-slate-200 xl:text-base">
+        <p className="tv-lg mt-1 font-semibold text-slate-100">
           {name ?? "—"}
         </p>
       </div>
@@ -287,18 +287,21 @@ function RebuyAddonStatus({ tournament, view }: { tournament: Tournament; view: 
   const rows: { label: string; open: boolean; text: string }[] = [];
   if (s.rebuyUntilLevel > 0)
     rows.push({ label: "Ребай", open: view.rebuyOpen, text: view.rebuyOpen ? `открыт · до ${s.rebuyUntilLevel} ур.` : "закрыт" });
+  // суммы аддонов коротко: 30к / 60к
+  const k = (n: number) => (n % 1000 === 0 ? `${n / 1000}к` : formatChips(n));
+  const sums = s.addonStack > 0 ? ` · ${k(s.addonStack)}${s.doubleAddonStack > 0 ? ` / ${k(s.doubleAddonStack)}` : ""}` : "";
   if (s.addonUntilLevel > 0)
     rows.push({
       label: "Аддон",
       open: view.addonOpen,
-      text: view.addonOpen ? "сейчас, на перерыве" : view.addonUpcoming ? `на перерыве после ${s.addonUntilLevel} ур.` : "закрыт",
+      text: view.addonOpen ? `сейчас, на перерыве${sums}` : view.addonUpcoming ? `перерыв после ${s.addonUntilLevel} ур.${sums}` : "закрыт",
     });
   if (rows.length === 0) return null;
   return (
     <div className="space-y-2 border-t border-white/[0.07] pt-4">
       {rows.map((r) => (
-        <div key={r.label} className="flex items-center justify-between gap-2 text-xs xl:text-sm">
-          <span className="text-slate-500">{r.label}</span>
+        <div key={r.label} className="tv-md flex items-center justify-between gap-2">
+          <span className="text-slate-400">{r.label}</span>
           <span className={r.open ? "font-semibold text-emerald-300" : r.text === "закрыт" ? "text-slate-600" : "text-slate-400"}>
             {r.text}
           </span>
@@ -320,7 +323,7 @@ function MainBoard({
   const next = view?.nextLevel;
 
   return (
-    <div className="mt-5 grid flex-1 grid-cols-1 gap-5 lg:grid-cols-[0.85fr_1.8fr_0.95fr] xl:mt-6 xl:gap-6">
+    <div className="mt-5 grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-[0.85fr_1.8fr_0.95fr] lg:grid-rows-[minmax(0,1fr)] xl:mt-6 xl:gap-6">
       {/* LEFT */}
       <div className="flex flex-col gap-4 xl:gap-5">
         <SideCard
@@ -334,26 +337,26 @@ function MainBoard({
 
         <SideCard
           icon="↗"
-          label="Прошло с игры"
+          label="Идёт турнир"
           value={formatClock(view?.elapsedMs ?? 0)}
-          description="Общее время турнира"
+          description="С начала игры"
         />
 
         {tournament?.combination && (
           <Panel className="flex min-h-0 flex-1 flex-col justify-center border-amber-300/15 bg-gradient-to-br from-amber-300/[0.07] to-[#101923] p-5 xl:p-6">
             <div className="flex items-center gap-3">
-              <span className="text-xl text-amber-300">♣</span>
+              <span className="tv-lg text-amber-300">♣</span>
 
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 xl:text-xs">
+              <span className="tv-sm font-bold uppercase tracking-[0.18em] text-slate-300">
                 Комбинация дня
               </span>
             </div>
 
-            <div className="mt-5 text-2xl font-black uppercase tracking-wide text-amber-300 xl:text-3xl 2xl:text-4xl">
+            <div className="mt-3 text-[clamp(1.5rem,2.5vw,3.5rem)] font-black uppercase leading-tight tracking-wide text-amber-300">
               {tournament.combination}
             </div>
 
-            <div className="mt-2 text-xs text-slate-500">
+            <div className="tv-sm mt-2 text-slate-400">
               Комбинация сегодняшнего дня
             </div>
           </Panel>
@@ -364,7 +367,7 @@ function MainBoard({
       <Panel className="relative flex min-w-0 flex-col items-center justify-center px-5 py-8 text-center md:px-8 xl:px-5 xl:py-10">
         {status !== "running" && tournament?.structure && (
           <div
-            className={`absolute left-1/2 top-5 -translate-x-1/2 rounded-full border px-4 py-1.5 text-[10px] font-bold tracking-[0.3em] xl:text-xs ${
+            className={`absolute left-1/2 top-5 -translate-x-1/2 tv-sm rounded-full border px-4 py-1.5 font-bold tracking-[0.3em] ${
               status === "paused"
                 ? "animate-pulse border-amber-300/40 bg-amber-300/10 text-amber-300"
                 : "border-white/15 bg-white/[0.04] text-slate-400"
@@ -384,24 +387,24 @@ function MainBoard({
           </div>
         ) : (
           <>
-            <div className="text-xs font-bold tracking-[0.4em] text-amber-300 xl:text-sm">
+            <div className="tv-lg font-bold tracking-[0.35em] text-amber-300">
               УРОВЕНЬ {view?.levelNumber ?? 1}
             </div>
 
-            <div className="mt-3 text-[9px] uppercase tracking-[0.25em] text-slate-500 xl:text-[10px]">
+            <div className="tv-sm mt-2 uppercase tracking-[0.25em] text-slate-400">
               До конца уровня
             </div>
 
             <Countdown
               ms={view?.remainingMs ?? 0}
               status={status}
-              className="mt-2 text-[clamp(5rem,10vw,10rem)] tracking-[-0.065em]"
+              className="mt-1 text-[clamp(5rem,11vw,13rem)] leading-none tracking-[-0.065em]"
             />
 
             {/* CURRENT BLINDS — главное после таймера: крупно и в золотой рамке */}
             {level && (
-              <div className="mt-7 w-full rounded-2xl border border-amber-300/30 bg-amber-300/[0.07] px-3 pb-5 pt-3 shadow-[0_0_40px_rgba(252,211,77,0.08)] xl:mt-9 xl:px-4 xl:pb-6">
-                <div className="text-[10px] font-bold tracking-[0.35em] text-amber-300/80 xl:text-xs">
+              <div className="mt-6 w-full rounded-2xl border border-amber-300/30 bg-amber-300/[0.07] px-3 pb-5 pt-3 shadow-[0_0_40px_rgba(252,211,77,0.08)] xl:mt-9 xl:px-4 xl:pb-6">
+                <div className="tv-sm font-bold tracking-[0.3em] text-amber-300/90">
                   ТЕКУЩИЕ БЛАЙНДЫ
                 </div>
                 <div className={`mt-2 grid w-full gap-2 ${level.ante > 0 ? "grid-cols-3" : "grid-cols-2"}`}>
@@ -414,25 +417,25 @@ function MainBoard({
               </div>
             )}
 
-            <div className="my-7 h-px w-full bg-white/10 xl:my-9" />
+            <div className="my-6 h-px w-full bg-white/10 xl:my-7" />
 
             {/* NEXT LEVEL */}
             {next ? (
               <>
-                <div className="text-[9px] font-bold tracking-[0.3em] text-slate-500 xl:text-[10px]">
+                <div className="tv-sm font-bold tracking-[0.3em] text-slate-400">
                   СЛЕДУЮЩИЕ БЛАЙНДЫ
                 </div>
 
-                <div className="mt-4 flex items-center justify-center gap-2 whitespace-nowrap text-xl font-bold md:gap-3 md:text-3xl xl:gap-2 xl:text-2xl 2xl:text-3xl">
+                <div className="mt-3 flex items-center justify-center gap-2 whitespace-nowrap text-[clamp(1.25rem,2.5vw,3.6rem)] font-bold leading-none md:gap-3">
                   <BlindsLine level={next} />
                 </div>
 
-                <div className="mt-3 text-[9px] tracking-[0.2em] text-slate-500 xl:text-[10px]">
+                <div className="tv-xs mt-3 tracking-[0.2em] text-slate-500">
                   СЛЕДУЮЩИЙ УРОВЕНЬ · {view?.nextLevelNumber}
                 </div>
               </>
             ) : (
-              <div className="text-[9px] font-bold tracking-[0.3em] text-slate-500 xl:text-[10px]">
+              <div className="tv-sm font-bold tracking-[0.3em] text-slate-400">
                 ПОСЛЕДНИЙ УРОВЕНЬ СТРУКТУРЫ
               </div>
             )}
@@ -441,13 +444,13 @@ function MainBoard({
       </Panel>
 
       {/* RIGHT */}
-      <div className="flex min-w-0 flex-col gap-4 xl:gap-5">
-        <Panel className="p-5 xl:p-6">
-          <div className="text-[10px] font-bold tracking-[0.25em] text-amber-300 xl:text-xs">
+      <div className="flex min-h-0 min-w-0 flex-col gap-4 xl:gap-5">
+        <Panel className="shrink-0 p-5 xl:p-6">
+          <div className="tv-sm font-bold tracking-[0.25em] text-amber-300">
             ИНФОРМАЦИЯ ОБ ИГРЕ
           </div>
 
-          <div className="mt-6 space-y-5 xl:mt-7">
+          <div className="mt-4 space-y-4">
             <Stat
               label="Игроков в игре"
               value={
@@ -472,7 +475,7 @@ function MainBoard({
         </Panel>
 
         {/* РЕЙТИНГ: экраны по очереди (RATING.md, раздел 7) */}
-        <Panel className="flex flex-1 flex-col p-5 xl:p-6">
+        <Panel className="flex min-h-[18rem] flex-1 flex-col overflow-hidden p-5 lg:min-h-0 xl:p-6">
           <RatingRotator updatedAt={tournament?.updatedAt} />
         </Panel>
       </div>
@@ -512,12 +515,12 @@ function BreakScreen({
         />
 
         <div className="relative flex flex-col items-center text-center lg:items-start lg:text-left">
-          <div className="text-sm font-bold tracking-[0.6em] text-amber-300 xl:text-base">
+          <div className="tv-lg font-bold tracking-[0.5em] text-amber-300">
             ☕ ПЕРЕРЫВ
           </div>
 
           {note && (
-            <div className="mt-3 text-lg font-semibold text-slate-200 xl:text-2xl">{note}</div>
+            <div className="mt-3 text-[clamp(1.1rem,2vw,3rem)] font-semibold leading-tight text-slate-200">{note}</div>
           )}
 
           <Countdown
@@ -526,7 +529,7 @@ function BreakScreen({
             className="mt-4 text-[clamp(6rem,13vw,13rem)] tracking-[-0.06em]"
           />
 
-          <div className="mt-4 text-base text-slate-400 xl:text-xl">
+          <div className="tv-lg mt-4 text-slate-400">
             {status === "paused" ? (
               <span className="text-amber-300">Перерыв на паузе</span>
             ) : (
@@ -541,25 +544,25 @@ function BreakScreen({
 
       <div className="grid grid-cols-1 gap-5 md:grid-cols-3 xl:gap-6">
         <Panel className="p-5 xl:p-6">
-          <div className="text-[10px] font-bold tracking-[0.25em] text-slate-500 xl:text-xs">
+          <div className="tv-sm font-bold tracking-[0.25em] text-slate-400">
             ПОСЛЕ ПЕРЕРЫВА · УРОВЕНЬ {view.levelNumber}
           </div>
           {level ? (
-            <div className="mt-4 flex items-center gap-2 whitespace-nowrap text-3xl font-black tabular-nums xl:text-4xl">
+            <div className="mt-3 flex items-center gap-2 whitespace-nowrap text-[clamp(1.8rem,2.8vw,4rem)] font-black leading-none tabular-nums">
               <BlindsLine level={level} />
             </div>
           ) : (
             <div className="mt-4 text-slate-500">—</div>
           )}
           {level && (
-            <div className="mt-2 text-xs text-slate-500">
+            <div className="tv-sm mt-3 text-slate-400">
               МБ / ББ{level.ante > 0 ? " / анте" : ""} · {Math.round(stepMs(level) / 60000)} мин
             </div>
           )}
         </Panel>
 
         <Panel className="p-5 xl:p-6">
-          <div className="text-[10px] font-bold tracking-[0.25em] text-slate-500 xl:text-xs">
+          <div className="tv-sm font-bold tracking-[0.25em] text-slate-400">
             ИГРА
           </div>
           <div className="mt-4 grid grid-cols-2 gap-4">
@@ -588,27 +591,27 @@ function BreakScreen({
             view.addonOpen ? "border-emerald-400/30 bg-gradient-to-br from-emerald-400/[0.08] to-[#101923]" : ""
           }`}
         >
-          <div className="text-[10px] font-bold tracking-[0.25em] text-slate-500 xl:text-xs">
+          <div className="tv-sm font-bold tracking-[0.25em] text-slate-400">
             РЕБАЙ И АДДОН
           </div>
           {s && (view.addonOpen || view.rebuyOpen) ? (
             <div className="mt-4 space-y-2">
               {view.addonOpen && (
                 <>
-                  <div className="text-xl font-black text-emerald-300 xl:text-2xl">АДДОН ДОСТУПЕН</div>
-                  <div className="text-sm text-slate-300 tabular-nums">
+                  <div className="text-[clamp(1.25rem,2vw,3rem)] font-black leading-tight text-emerald-300">АДДОН ДОСТУПЕН</div>
+                  <div className="tv-md text-slate-300 tabular-nums">
                     Аддон {formatChips(s.addonStack)} · двойной {formatChips(s.doubleAddonStack)}
                   </div>
                 </>
               )}
               {view.rebuyOpen && (
-                <div className="text-sm text-slate-300 tabular-nums">
+                <div className="tv-md text-slate-300 tabular-nums">
                   Ребай {formatChips(s.rebuyStack)} — открыт до конца {s.rebuyUntilLevel} ур.
                 </div>
               )}
             </div>
           ) : (
-            <div className="mt-4 text-xl font-bold text-slate-600">Закрыты</div>
+            <div className="mt-4 text-[clamp(1.25rem,2vw,3rem)] font-bold text-slate-600">Закрыты</div>
           )}
         </Panel>
       </div>
@@ -661,7 +664,7 @@ function Ticker({ text }: { text: string }) {
   return (
     <div className="mt-5 overflow-hidden rounded-xl border border-amber-300/15 bg-amber-300/[0.05] py-2.5">
       <div
-        className="animate-marquee inline-block whitespace-nowrap pl-[100%] text-sm font-semibold tracking-wide text-amber-100 xl:text-lg"
+        className="animate-marquee inline-block whitespace-nowrap pl-[100%] tv-lg font-semibold tracking-wide text-amber-100"
         style={{ animationDuration: `${duration}s` }}
       >
         {text}
@@ -679,14 +682,14 @@ function Blind({
 }) {
   return (
     <div className="min-w-0 text-center">
-      <div className="flex min-h-8 items-center justify-center text-[9px] font-bold leading-4 tracking-[0.12em] text-slate-400 md:text-[10px] 2xl:text-xs">
+      <div className="tv-sm flex min-h-8 items-center justify-center font-bold tracking-[0.08em] text-slate-300">
         {label}
       </div>
 
       {/* размер растёт с экраном; длинные числа (100 000) чуть мельче, чтобы влезли в колонку */}
       <div
         className={`mt-1 whitespace-nowrap font-black tabular-nums leading-none tracking-tight text-amber-200 ${
-          value.length > 6 ? "text-[clamp(1.9rem,2.9vw,3.6rem)]" : "text-[clamp(2.4rem,3.7vw,4.8rem)]"
+          value.length > 6 ? "text-[clamp(1.9rem,3.2vw,4.6rem)]" : "text-[clamp(2.4rem,4.1vw,6rem)]"
         }`}
       >
         {value}
@@ -706,11 +709,11 @@ function Stat({
 }) {
   return (
     <div>
-      <div className="text-xs text-slate-500">{label}</div>
+      <div className="tv-md text-slate-400">{label}</div>
 
-      <div className="mt-2 flex items-baseline gap-2 text-2xl font-bold tabular-nums xl:text-3xl">
+      <div className="mt-1 flex items-baseline gap-2 text-[clamp(1.5rem,2.4vw,3.4rem)] font-bold leading-tight tabular-nums">
         {value}
-        {hint && <span className="text-sm font-semibold text-slate-500 xl:text-base">{hint}</span>}
+        {hint && <span className="tv-md font-semibold text-slate-400">{hint}</span>}
       </div>
     </div>
   );

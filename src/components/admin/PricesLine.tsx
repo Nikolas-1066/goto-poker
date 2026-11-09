@@ -5,7 +5,7 @@ import { formatRub, hasPrices } from "@/lib/cash";
 import type { Prices } from "@/lib/types";
 import { Button, Field, inputClass } from "./ui";
 
-const FIELDS: { key: keyof Prices; label: string; short: string }[] = [
+const FIELDS: { key: Exclude<keyof Prices, "freeEntryUntil">; label: string; short: string }[] = [
   { key: "entry", label: "Вход, ₽", short: "вход" },
   { key: "reentry", label: "Re-entry, ₽", short: "re-entry" },
   { key: "addon", label: "Аддон, ₽", short: "аддон" },
@@ -19,6 +19,7 @@ const FIELDS: { key: keyof Prices; label: string; short: string }[] = [
 export function PricesLine({ prices, onSave }: { prices: Prices; onSave: (prices: Prices) => void }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(() => Object.fromEntries(FIELDS.map((f) => [f.key, String(prices[f.key] || "")])));
+  const [freeUntil, setFreeUntil] = useState(prices.freeEntryUntil ?? "");
   const off = !hasPrices(prices);
 
   if (editing) {
@@ -37,13 +38,22 @@ export function PricesLine({ prices, onSave }: { prices: Prices; onSave: (prices
             </Field>
           ))}
         </div>
+        <Field label="Бесплатный вход до (пусто — без акции)">
+          <div className="flex gap-2">
+            <input className={inputClass} type="time" value={freeUntil} onChange={(e) => setFreeUntil(e.target.value)} />
+            {freeUntil && <Button onClick={() => setFreeUntil("")}>Убрать</Button>}
+          </div>
+        </Field>
         <div className="text-xs text-slate-500">Новые цены — для следующих входов и аддонов. Уже начисленное не меняется.</div>
         <div className="grid grid-cols-2 gap-2">
           <Button onClick={() => setEditing(false)}>Отмена</Button>
           <Button
             variant="primary"
             onClick={() => {
-              onSave(Object.fromEntries(FIELDS.map((f) => [f.key, Number(draft[f.key]) || 0])) as Prices);
+              onSave({
+                ...(Object.fromEntries(FIELDS.map((f) => [f.key, Number(draft[f.key]) || 0])) as Omit<Prices, "freeEntryUntil">),
+                freeEntryUntil: freeUntil,
+              });
               setEditing(false);
             }}
           >
@@ -67,10 +77,17 @@ export function PricesLine({ prices, onSave }: { prices: Prices; onSave: (prices
           <>
             Цены:{" "}
             {FIELDS.map((f) => `${f.short} ${formatRub(prices[f.key])}`).join(" · ")}
+            {prices.freeEntryUntil && (
+              <span className="ml-1 font-semibold text-emerald-300">· вход бесплатный до {prices.freeEntryUntil}</span>
+            )}
           </>
         )}
       </div>
-      <Button variant={off ? "primary" : "ghost"} onClick={() => setEditing(true)}>
+      <Button variant={off ? "primary" : "ghost"} onClick={() => {
+          setDraft(Object.fromEntries(FIELDS.map((f) => [f.key, String(prices[f.key] || "")])));
+          setFreeUntil(prices.freeEntryUntil ?? "");
+          setEditing(true);
+        }}>
         {off ? "Задать" : "Изменить"}
       </Button>
     </div>

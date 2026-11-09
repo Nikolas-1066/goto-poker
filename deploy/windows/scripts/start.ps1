@@ -12,6 +12,17 @@ try {
     if (-not (Test-Path $NodeExe)) { throw "Не найден $NodeExe. Распакуйте архив заново." }
 
     # 1. Сервер
+    # Если порт держит табло из другой папки — оно показывало бы ЧУЖУЮ базу. Останавливаем.
+    Stop-ForeignBoard $port
+    $owner = Get-PortOwner $port
+    if ($owner -and $owner.ProcessName -ne 'node') {
+        throw "Порт $port занят программой «$($owner.ProcessName)». Закройте её или перезагрузите ноутбук."
+    }
+    if ($owner -and -not (Test-Server $port)) {
+        # Наше табло зависло или ещё запускается (например, два запуска одновременно)
+        for ($i = 0; $i -lt 20 -and -not (Test-Server $port); $i++) { Start-Sleep -Milliseconds 500 }
+        if (-not (Test-Server $port)) { Stop-Server; Start-Sleep -Seconds 1 }
+    }
     if (Test-Server $port) {
         Write-Host '  Сервер уже работает.' -ForegroundColor Green
     } else {

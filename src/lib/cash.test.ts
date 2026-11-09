@@ -107,3 +107,16 @@ describe("предупреждение при завершении", () => {
     expect(debtWarning(sum(21, 100))).toMatch("21 игрок не доплатил");
   });
 });
+
+describe("бесплатный вход до ЧЧ:ММ", () => {
+  const at = (h: number, m: number) => new Date(2026, 10, 9, h, m).getTime();
+  it("до времени — бесплатно, после — платно, после полуночи — платно", async () => {
+    const { isFreeEntryTime } = await import("./cash");
+    expect(isFreeEntryTime("20:00", at(18, 30))).toBe(true);
+    expect(isFreeEntryTime("20:00", at(19, 59))).toBe(true);
+    expect(isFreeEntryTime("20:00", at(20, 0))).toBe(false);
+    expect(isFreeEntryTime("20:00", at(1, 0))).toBe(false);
+    expect(isFreeEntryTime("00:30", at(23, 50))).toBe(true);
+    expect(isFreeEntryTime(undefined, at(18, 0))).toBe(false);
+  });
+});

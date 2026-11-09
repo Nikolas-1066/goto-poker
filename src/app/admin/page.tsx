@@ -205,6 +205,8 @@ function Control() {
               rebuyOpen={view.rebuyOpen}
               addonOpen={view.addonOpen}
               addonUpcoming={view.addonUpcoming}
+              rebuyLate={view.rebuyLate}
+              addonLate={view.addonLate}
             />
           }
         >
@@ -226,12 +228,20 @@ function Control() {
             />
           )}
           {tournament.mode === "players" ? (
+            <>
+            {(view.rebuyLate || view.addonLate) && (
+              <div className="mb-3 rounded-lg border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-sm text-amber-200">
+                ⏱ Дозапись: для игроков {view.rebuyLate && view.addonLate ? "re-entry и аддоны" : view.rebuyLate ? "re-entry" : "аддоны"} уже
+                закрыты, но до конца {view.levelNumber}-го уровня их ещё можно внести, если не успели.
+              </div>
+            )}
             <TournamentPlayers
               tournament={tournament}
-              rebuyOpen={view.rebuyOpen}
-              addonOpen={view.addonOpen}
+              rebuyOpen={view.rebuyOpen || view.rebuyLate}
+              addonOpen={view.addonOpen || view.addonLate}
               onChanged={refresh}
             />
+            </>
           ) : (
             <>
               <Button
@@ -613,11 +623,15 @@ function RebuyAddonBadges({
   rebuyOpen,
   addonOpen,
   addonUpcoming,
+  rebuyLate,
+  addonLate,
 }: {
   tournament: Tournament;
   rebuyOpen: boolean;
   addonOpen: boolean;
   addonUpcoming: boolean;
+  rebuyLate: boolean;
+  addonLate: boolean;
 }) {
   const s = tournament.structure;
   if (!s) return null;
@@ -633,9 +647,14 @@ function RebuyAddonBadges({
   );
   return (
     <div className="flex flex-wrap justify-end gap-1">
-      {s.rebuyUntilLevel > 0 && badge("Ребай", rebuyOpen, rebuyOpen ? `до ${s.rebuyUntilLevel} ур.` : "закрыт")}
+      {s.rebuyUntilLevel > 0 &&
+        badge("Ребай", rebuyOpen || rebuyLate, rebuyOpen ? `до ${s.rebuyUntilLevel} ур.` : rebuyLate ? "дозапись" : "закрыт")}
       {s.addonUntilLevel > 0 &&
-        badge("Аддон", addonOpen, addonOpen ? "сейчас" : addonUpcoming ? `на перерыве после ${s.addonUntilLevel} ур.` : "закрыт")}
+        badge(
+          "Аддон",
+          addonOpen || addonLate,
+          addonOpen ? "сейчас" : addonLate ? "дозапись" : addonUpcoming ? `на перерыве после ${s.addonUntilLevel} ур.` : "закрыт",
+        )}
     </div>
   );
 }

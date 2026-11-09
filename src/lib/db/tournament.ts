@@ -6,6 +6,7 @@ import {
   CHARGE_LABEL,
   cashByPlayer,
   formatRub,
+  isFreeEntryTime,
   PAY_METHOD_LABEL,
   priceOf,
   type ChargeType,
@@ -253,9 +254,10 @@ function context(t: Tournament, kind: string, now: number, force?: boolean) {
   const finished = t.status === "finished";
   return {
     // первый вход: до старта — всегда, после — пока открыты ребаи (поздняя регистрация)
-    entryOpen: !finished && (t.status === "idle" || view.rebuyOpen),
-    reentryOpen: !finished && view.rebuyOpen,
-    addonOpen: !finished && view.addonOpen,
+    // + «дозапись» админом в первом уровне после закрытия (view.rebuyLate / addonLate)
+    entryOpen: !finished && (t.status === "idle" || view.rebuyOpen || view.rebuyLate),
+    reentryOpen: !finished && (view.rebuyOpen || view.rebuyLate),
+    addonOpen: !finished && (view.addonOpen || view.addonLate),
     isFinal: kind !== "regular",
     levelNo: view.levelNumber,
     force: !!force,
@@ -368,6 +370,12 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
       fail(check({ type: "entry", participantId: p.id }, { reentryOpen: ctx.entryOpen }), true);
       undoEventId = addEvent(p.id, "entry");
       message = `${name(p.id)} в игре`;
+      // акция: пришёл до заданного времени — первый вход бесплатный (re-entry и аддоны — платно)
+      const freeUntil = t.structure?.prices.freeEntryUntil;
+      if (freeUntil && isFreeEntryTime(freeUntil, now)) {
+        db.prepare("UPDATE events SET free = 1 WHERE id = ?").run(undoEventId);
+        message += ` · вход бесплатный (до ${freeUntil})`;
+      }
       // «Пришёл + оплатил» — сразу закрыть долг за турнир
       if (action.pay) {
         const debt = debtOf(p.player_id);

@@ -163,7 +163,24 @@ export const NO_PRICES: Prices = { entry: 0, reentry: 0, addon: 0, doubleAddon: 
 export function sanitizePrices(input: unknown): Prices {
   const p = (input ?? {}) as Record<string, unknown>;
   const rub = (v: unknown) => int(v, 1_000_000);
-  return { entry: rub(p.entry), reentry: rub(p.reentry), addon: rub(p.addon), doubleAddon: rub(p.doubleAddon) };
+  const free = sanitizeTime(p.freeEntryUntil);
+  return {
+    entry: rub(p.entry),
+    reentry: rub(p.reentry),
+    addon: rub(p.addon),
+    doubleAddon: rub(p.doubleAddon),
+    ...(free ? { freeEntryUntil: free } : {}),
+  };
+}
+
+/** Время «ЧЧ:ММ» (0:00–23:59) или пустая строка */
+export function sanitizeTime(v: unknown): string {
+  const m = /^\s*(\d{1,2})[:.](\d{2})\s*$/.exec(String(v ?? ""));
+  if (!m) return "";
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h > 23 || min > 59) return "";
+  return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
 }
 
 /** Дополнить пресет из старой версии базы новыми полями. */

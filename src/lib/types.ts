@@ -20,7 +20,14 @@ export type BreakStep = {
 export type Step = LevelStep | BreakStep;
 
 /** Цены в рублях (docs/CASH.md); 0 — бесплатно / не задано */
-export type Prices = { entry: number; reentry: number; addon: number; doubleAddon: number };
+export type Prices = {
+  entry: number;
+  reentry: number;
+  addon: number;
+  doubleAddon: number;
+  /** Первый вход бесплатный, если игрок пришёл до этого времени, «ЧЧ:ММ»; пусто — акции нет */
+  freeEntryUntil?: string;
+};
 
 /** Пресет турнира: структура блайндов + параметры стека. */
 export type Preset = {
