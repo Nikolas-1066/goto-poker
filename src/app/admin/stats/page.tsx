@@ -9,6 +9,7 @@ import { AdminShell } from "@/components/admin/AdminShell";
 import { OwnerGate } from "@/components/admin/Owner";
 import { Card } from "@/components/admin/ui";
 import { formatRub, PAY_METHOD_LABEL, PAY_METHODS } from "@/lib/cash";
+import { EXPENSE_LABEL, formatHours } from "@/lib/expenses";
 import { periodLabel, WEEKDAYS, type BreakdownRow, type StatsSummary, type TopRow } from "@/lib/stats";
 
 export default function StatsPage() {
@@ -116,6 +117,7 @@ function Stats({ onLocked }: { onLocked: () => void }) {
       {s && data && (
         <>
           <MoneyCard s={s} />
+          {(s.expenses ?? 0) > 0 && <StaffCard s={s} />}
           <PlayersCard s={s} />
           {data.breakdown.length > 0 && <BreakdownCard rows={data.breakdown} byYears={tab === "all"} />}
           <div className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2">
@@ -152,10 +154,60 @@ function MoneyCard({ s }: { s: StatsSummary }) {
         </div>
         <Tile label="Долги" value={formatRub(s.debt)} tone={s.debt > 0 ? "red" : undefined} />
         <Tile label="Бесплатно" value={formatRub(s.free)} tone={s.free > 0 ? "sky" : undefined} />
+        <Tile
+          label="Расходы"
+          value={formatRub(s.expenses ?? 0)}
+          sub={
+            s.expenses
+              ? [
+                  s.expensesByKind.dealer && `дилеры ${formatRub(s.expensesByKind.dealer)}`,
+                  s.expensesByKind.admin && `админ ${formatRub(s.expensesByKind.admin)}`,
+                  s.expensesByKind.other && `прочее ${formatRub(s.expensesByKind.other)}`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+              : undefined
+          }
+          tone={s.expenses ? "red" : undefined}
+        />
+        <Tile label="Собрано − расходы" value={formatRub(s.profit ?? s.paid)} tone="gold" />
       </div>
       <div className="mt-2 text-xs text-slate-500">
-        Собрано — по дню оплаты. Долги и бесплатно — за турниры этого периода. До появления кассы деньги не записывались.
+        Собрано — по дню оплаты. Долги, бесплатно и расходы — за турниры этого периода. До появления кассы деньги не записывались.
+        Расходы вносят в «Истории» → турнир → «Расходы».
       </div>
+    </Card>
+  );
+}
+
+/** Дилеры и админы за период: сколько смен, часов и сколько заплатили */
+function StaffCard({ s }: { s: StatsSummary }) {
+  if (!s.staff?.length) return null;
+  return (
+    <Card title="Дилеры и админы">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500">
+            <th className="py-2">Кто</th>
+            <th className="w-16 py-2 text-center">Смен</th>
+            <th className="w-20 py-2 text-right">Часов</th>
+            <th className="w-24 py-2 text-right">Заплачено</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-white/[0.06]">
+          {s.staff.map((r) => (
+            <tr key={`${r.kind}-${r.name}`}>
+              <td className="py-2">
+                <span className="font-semibold">{r.name}</span>
+                <span className="text-xs text-slate-500"> · {EXPENSE_LABEL[r.kind].toLowerCase()}</span>
+              </td>
+              <td className="py-2 text-center tabular-nums">{r.shifts}</td>
+              <td className="py-2 text-right tabular-nums text-slate-400">{r.hours ? formatHours(r.hours) : "—"}</td>
+              <td className="py-2 text-right font-semibold tabular-nums">{formatRub(r.amount)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </Card>
   );
 }

@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AdminShell } from "@/components/admin/AdminShell";
-import { CashLine } from "@/components/admin/Cash";
+import { CashLine, CashPanel } from "@/components/admin/Cash";
+import { ExpensesBlock } from "@/components/admin/Expenses";
 import { ReportBlock } from "@/components/admin/Report";
 import { Button, Card, inputClass } from "@/components/admin/ui";
-import { formatRub, PAY_METHOD_LABEL, PAY_METHODS } from "@/lib/cash";
+import { formatRub, PAY_METHOD_LABEL, PAY_METHODS, type PayMethod } from "@/lib/cash";
 import type { HistoryItem, TournamentDetails } from "@/lib/db/history";
 import { formatEloDelta } from "@/lib/rating/elo";
 import { formatPlace } from "@/lib/results";
@@ -123,7 +124,7 @@ function History() {
   );
 }
 
-type EditRow = { participantId: number; name: string; place: string; entries: string; ko: string };
+type EditRow = { participantId: number; name: string; place: string; entries: string; ko: string; addon: 0 | 1 | 2 };
 
 function Details({ id, onBack }: { id: number; onBack: () => void }) {
   const [t, setT] = useState<TournamentDetails | null>(null);
@@ -150,6 +151,7 @@ function Details({ id, onBack }: { id: number; onBack: () => void }) {
         place: r.place != null ? String(r.place) : "",
         entries: String(r.entries),
         ko: num(r.ko),
+        addon: r.doubleAddons ? 2 : r.addons ? 1 : 0,
       })),
     );
   }
@@ -167,6 +169,7 @@ function Details({ id, onBack }: { id: number; onBack: () => void }) {
           place: Number(r.place),
           entries: Number(r.entries),
           ko: Number(r.ko.replace(",", ".")),
+          addon: r.addon,
         })),
       }),
     });
@@ -179,6 +182,46 @@ function Details({ id, onBack }: { id: number; onBack: () => void }) {
     setT(data.tournament);
     setEdit(null);
     setFlash(data.changed ? "Итоги исправлены. Изменения записаны в журнал." : "Ничего не изменилось");
+  }
+
+  /** Исправление кассы: оплата / отмена оплаты / «бесплатно» */
+  async function cashFix(body: Record<string, unknown>) {
+    setBusy(true);
+    setError("");
+    setFlash("");
+    const res = await fetch(`/api/history/${id}/cash`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    setBusy(false);
+    if (!res.ok) {
+      setError(data.error ?? "Не удалось сохранить");
+      return;
+    }
+    setT(data.tournament);
+    setFlash(`${data.message ?? "Сохранено"}. Изменение записано в журнал.`);
+  }
+
+  /** Расходы: добавить / удалить */
+  async function expenseAct(body: Record<string, unknown>) {
+    setBusy(true);
+    setError("");
+    setFlash("");
+    const res = await fetch(`/api/history/${id}/expenses`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    setBusy(false);
+    if (!res.ok) {
+      setError(data.error ?? "Не удалось сохранить");
+      return false;
+    }
+    setT(data.tournament);
+    return true;
   }
 
   const back = (
@@ -214,10 +257,12 @@ function Details({ id, onBack }: { id: number; onBack: () => void }) {
         <div className="mt-4">
           <div className="mb-2 text-sm text-slate-400">
             Одинаковые места — делёж (два «3» = «3–4», следующее место — 5). Нокауты можно с половинкой: 0,5.
+            «Входов» — первый вход + re-entry; «А» — аддон (нажмите, чтобы переключить: — / А / 2А). Касса пересчитается сама:
+            добавленный re-entry или аддон начислится игроку по цене турнира, убранный — снимется.
           </div>
           <div className="space-y-2">
             {edit.map((r, i) => (
-              <div key={r.participantId} className="grid grid-cols-[3.5rem_minmax(0,1fr)_3.5rem_3.5rem] items-center gap-2">
+              <div key={r.participantId} className="grid grid-cols-[3rem_minmax(0,1fr)_3rem_3rem_3rem] items-center gap-2">
                 <input
                   className={`${inputClass} text-center`}
                   inputMode="numeric"
@@ -242,14 +287,24 @@ function Details({ id, onBack }: { id: number; onBack: () => void }) {
                   value={r.ko}
                   onChange={(e) => set(i, { ko: e.target.value.replace(/[^\d,.]/g, "") })}
                 />
+                <button
+                  type="button"
+                  aria-label={`Аддон: ${r.name}`}
+                  title="Аддон: нет / обычный / двойной"
+                  className={`${inputClass} text-center font-semibold ${r.addon ? "text-emerald-300" : "text-slate-500"}`}
+                  onClick={() => set(i, { addon: ((r.addon + 1) % 3) as 0 | 1 | 2 })}
+                >
+                  {r.addon === 2 ? "2А" : r.addon === 1 ? "А" : "—"}
+                </button>
               </div>
             ))}
           </div>
-          <div className="mt-1 grid grid-cols-[3.5rem_minmax(0,1fr)_3.5rem_3.5rem] gap-2 text-center text-[10px] uppercase text-slate-500">
+          <div className="mt-1 grid grid-cols-[3rem_minmax(0,1fr)_3rem_3rem_3rem] gap-2 text-center text-[10px] uppercase text-slate-500">
             <span>место</span>
             <span />
             <span>входов</span>
             <span>KO</span>
+            <span>аддон</span>
           </div>
           {error && <div className="mt-3 text-sm text-red-300">{error}</div>}
           <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:justify-end">
@@ -309,7 +364,16 @@ function Details({ id, onBack }: { id: number; onBack: () => void }) {
                 : "Очки ещё не посчитаны — нажмите «Пересчитать» в разделе «Рейтинг»."}
             </div>
           )}
-          {t.cashReport && <CashReport report={t.cashReport} />}
+          {t.cashReport && <CashReport report={t.cashReport} busy={busy} onFix={cashFix} />}
+          <ExpensesBlock
+            expenses={t.expenses}
+            names={t.expenseNames}
+            paid={t.cashReport ? t.cashReport.summary.paid : null}
+            busy={busy}
+            onAdd={(e) => expenseAct({ type: "add", ...e })}
+            onDelete={(expenseId) => void expenseAct({ type: "delete", expenseId })}
+          />
+          {error && <div className="mt-3 text-sm text-red-300">{error}</div>}
           {flash && <div className="mt-3 text-sm text-emerald-300">{flash}</div>}
           {finished ? (
             <div className="mt-4 flex flex-wrap gap-2">
@@ -325,8 +389,20 @@ function Details({ id, onBack }: { id: number; onBack: () => void }) {
   );
 }
 
-/** Касса турнира: итог и по игрокам — кто сколько должен (долг принимают в карточке игрока) */
-function CashReport({ report }: { report: NonNullable<TournamentDetails["cashReport"]> }) {
+/**
+ * Касса турнира: итог и по игрокам — кто сколько должен. Нажмите на сумму у игрока — откроется
+ * исправление: кто сколько фактически занёс (можно больше начисленного), отмена оплаты, «бесплатно».
+ */
+function CashReport({
+  report,
+  busy,
+  onFix,
+}: {
+  report: NonNullable<TournamentDetails["cashReport"]>;
+  busy: boolean;
+  onFix: (body: Record<string, unknown>) => void;
+}) {
+  const [open, setOpen] = useState<number | null>(null);
   const how = (byMethod: Record<string, number>) =>
     PAY_METHODS.filter((m) => byMethod[m] > 0)
       .map((m) => PAY_METHOD_LABEL[m].toLowerCase())
@@ -335,6 +411,10 @@ function CashReport({ report }: { report: NonNullable<TournamentDetails["cashRep
     <div className="mt-6">
       <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Касса</div>
       <CashLine summary={report.summary} />
+      <div className="mt-1 text-xs text-slate-500">
+        Не сходится с фактическими деньгами? Нажмите «✎» у игрока: добавьте оплату (можно больше начисленного), отмените
+        ошибочную или отметьте вход бесплатным.
+      </div>
       <table className="mt-2 w-full text-sm">
         <thead>
           <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500">
@@ -345,7 +425,7 @@ function CashReport({ report }: { report: NonNullable<TournamentDetails["cashRep
           </tr>
         </thead>
         <tbody className="divide-y divide-white/[0.06]">
-          {report.players.map((p) => (
+          {report.players.map((p) => [
             <tr key={p.playerId}>
               <td className="py-2">
                 <Link href={`/admin/players/${p.playerId}`} className="font-semibold hover:text-amber-200">
@@ -364,13 +444,37 @@ function CashReport({ report }: { report: NonNullable<TournamentDetails["cashRep
                 }`}
               >
                 {p.debt > 0 ? formatRub(p.debt) : p.debt < 0 ? `+${formatRub(-p.debt)}` : "—"}
+                <button
+                  type="button"
+                  className="ml-2 rounded border border-white/10 px-1.5 text-xs font-normal text-slate-400 hover:text-amber-200"
+                  title="Исправить кассу игрока"
+                  onClick={() => setOpen(open === p.playerId ? null : p.playerId)}
+                >
+                  ✎
+                </button>
               </td>
-            </tr>
-          ))}
+            </tr>,
+            open === p.playerId && (
+              <tr key={`${p.playerId}-fix`}>
+                <td colSpan={4} className="pb-3">
+                  <CashPanel
+                    key={`${p.debt}-${p.cash.payments.length}`}
+                    name={p.name}
+                    cash={p.cash}
+                    busy={busy}
+                    allowOverpay
+                    onPay={(amount: number, method: PayMethod) => onFix({ type: "pay", playerId: p.playerId, amount, method })}
+                    onCancelPayment={(paymentId) => onFix({ type: "cancelPayment", paymentId })}
+                    onSetFree={(eventId, free) => onFix({ type: "setFree", eventId, free })}
+                  />
+                </td>
+              </tr>
+            ),
+          ])}
         </tbody>
       </table>
       {report.summary.debt > 0 && (
-        <div className="mt-2 text-xs text-slate-500">Долг принимают в карточке игрока (нажмите на имя) или когда он придёт на турнир.</div>
+        <div className="mt-2 text-xs text-slate-500">Долг можно принять здесь (✎), в карточке игрока или когда он придёт на турнир.</div>
       )}
     </div>
   );

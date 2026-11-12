@@ -1,7 +1,7 @@
 // Чистая логика часов турнира. Используется и на сервере, и в браузере,
 // поэтому табло и админка всегда показывают одно и то же время.
 
-import type { LevelStep, Step, Tournament, TournamentAction } from "./types";
+import type { LevelStep, Preset, Step, Tournament, TournamentAction } from "./types";
 import { sanitizePrices } from "./presets";
 
 export const stepMs = (step: Step | undefined) =>
@@ -73,6 +73,7 @@ export function emptyTournament(): Tournament {
     rebuys: 0,
     addons: 0,
     doubleAddons: 0,
+    burnedChips: 0,
     combination: "",
     ticker: "",
     tickerOn: false,
@@ -178,6 +179,29 @@ export function applyAction(
       };
       break;
     }
+    case "newTournament": {
+      if (!t.structure) throw new Error("Сначала загрузите структуру турнира");
+      // берём пресет заново (вдруг в нём поправили цены или уровни); удалён — та же структура
+      const p = t.presetId ? findPreset(t.presetId) : undefined;
+      let structure: Omit<Preset, "updatedAt">;
+      if (p && p.steps.length > 0) {
+        const { updatedAt: _ignored, ...rest } = p;
+        void _ignored;
+        structure = structuredClone(rest);
+      } else structure = structuredClone(t.structure);
+      next = {
+        ...emptyTournament(),
+        name: t.name,
+        combination: t.combination,
+        ticker: t.ticker,
+        tickerOn: t.tickerOn,
+        mode: t.mode,
+        presetId: t.presetId,
+        structure,
+        remainingMs: stepMs(structure.steps[0]),
+      };
+      break;
+    }
     case "reset": {
       if (!t.structure) return t;
       next = {
@@ -193,6 +217,7 @@ export function applyAction(
         rebuys: 0,
         addons: 0,
         doubleAddons: 0,
+        burnedChips: 0,
       };
       break;
     }
@@ -239,6 +264,7 @@ export function applyAction(
         if (p.rebuys !== undefined) next.rebuys = nonNeg(p.rebuys);
         if (p.addons !== undefined) next.addons = nonNeg(p.addons);
         if (p.doubleAddons !== undefined) next.doubleAddons = nonNeg(p.doubleAddons);
+        if (p.burnedChips !== undefined) next.burnedChips = nonNeg(p.burnedChips);
       }
       if (typeof p.ticker === "string") next.ticker = p.ticker.slice(0, 500);
       if (typeof p.tickerOn === "boolean") next.tickerOn = p.tickerOn;
@@ -326,7 +352,8 @@ export function boardView(t: Tournament, now: number): BoardView {
     ? t.entries * s.startingStack +
       t.rebuys * s.rebuyStack +
       t.addons * s.addonStack +
-      (t.doubleAddons ?? 0) * (s.doubleAddonStack ?? s.addonStack * 2)
+      (t.doubleAddons ?? 0) * (s.doubleAddonStack ?? s.addonStack * 2) -
+      (t.burnedChips ?? 0)
     : 0;
   const periodLevel = Math.max(1, levelNo(clock.index));
   const finished = t.status === "finished";

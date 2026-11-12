@@ -190,6 +190,9 @@ export default function Home() {
       <footer className="flex items-center justify-between gap-4 pt-4 tv-xs tracking-[0.2em] text-slate-500">
         <span>
           ГОТО ПОКЕР
+          {process.env.NEXT_PUBLIC_BUILD_LABEL && (
+            <span className="ml-2 normal-case tracking-normal text-slate-600">· v{process.env.NEXT_PUBLIC_BUILD_LABEL}</span>
+          )}
           {!online && <span className="ml-3 text-red-400">НЕТ СВЯЗИ С СЕРВЕРОМ</span>}
           {lanUrl && (status !== "running" || view?.step?.kind === "break") && (
             <span className="ml-4 normal-case tracking-normal text-slate-500">

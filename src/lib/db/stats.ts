@@ -3,6 +3,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { PayMethod } from "../cash";
 import type { StatsData } from "../stats";
+import { allExpenses } from "./expenses";
 
 export function loadStatsData(db: DatabaseSync): StatsData {
   const tournaments = (
@@ -76,5 +77,14 @@ export function loadStatsData(db: DatabaseSync): StatsData {
     (r) => r.at,
   );
 
-  return { tournaments, participations, payments, cash, firstVisits };
+  const expenses = allExpenses(db).map((e) => ({
+    tournamentId: e.tournamentId,
+    tournamentAt: e.tournamentAt,
+    kind: e.kind,
+    name: e.name,
+    hours: e.hours,
+    amount: e.amount,
+  }));
+
+  return { tournaments, participations, payments, cash, firstVisits, expenses };
 }

@@ -54,6 +54,7 @@ export function CashPanel({
   onPay,
   onCancelPayment,
   onSetFree,
+  allowOverpay = false,
 }: {
   name: string;
   cash: PlayerCash;
@@ -61,6 +62,8 @@ export function CashPanel({
   onPay: (amount: number, method: PayMethod) => void;
   onCancelPayment: (paymentId: number) => void;
   onSetFree: (eventId: number, free: boolean) => void;
+  /** Исправление кассы в истории: можно записать больше начисленного (фактически занёс больше) */
+  allowOverpay?: boolean;
 }) {
   const [amount, setAmount] = useState(cash.debt > 0 ? String(cash.debt) : "");
   const value = Number(amount) || 0;
@@ -111,7 +114,7 @@ export function CashPanel({
         </div>
       )}
 
-      {cash.debt > 0 ? (
+      {cash.debt > 0 || allowOverpay ? (
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <span className="shrink-0 text-slate-400">Принять</span>
@@ -125,12 +128,25 @@ export function CashPanel({
           </div>
           <div className="grid grid-cols-3 gap-2">
             {PAY_METHODS.map((m) => (
-              <Button key={m} variant="primary" disabled={busy || value <= 0 || value > cash.debt} onClick={() => onPay(value, m)}>
+              <Button
+                key={m}
+                variant="primary"
+                disabled={busy || value <= 0 || (!allowOverpay && value > cash.debt)}
+                onClick={() => onPay(value, m)}
+              >
                 {PAY_METHOD_LABEL[m]}
               </Button>
             ))}
           </div>
-          {value > cash.debt && <div className="text-xs text-red-300">Больше, чем долг: {formatRub(cash.debt)}</div>}
+          {value > cash.debt &&
+            (allowOverpay ? (
+              <div className="text-xs text-amber-200">
+                Больше, чем {cash.debt > 0 ? `долг ${formatRub(cash.debt)}` : "начислено"} — запишется как переплата. Так отмечают, что фактически
+                занесли больше.
+              </div>
+            ) : (
+              <div className="text-xs text-red-300">Больше, чем долг: {formatRub(cash.debt)}</div>
+            ))}
         </div>
       ) : cash.debt < 0 ? (
         <div className="text-xs text-amber-200">

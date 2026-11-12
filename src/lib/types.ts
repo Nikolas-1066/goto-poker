@@ -81,6 +81,8 @@ export type Tournament = {
   rebuys: number;
   addons: number;
   doubleAddons: number;
+  /** Сожжённые фишки (игроки ушли сами, фишки убраны из игры) — вычитаются из среднего стека */
+  burnedChips?: number;
 
   /** «Комбинация дня»; пустая строка — блок скрыт */
   combination: string;
@@ -109,6 +111,8 @@ export type TournamentAction =
   | { type: "adjustTime"; deltaMs: number }
   | { type: "setTime"; remainingMs: number }
   | { type: "loadPreset"; presetId: string }
+  /** Новый турнир с той же структурой (свежая версия пресета, если он есть); прошлый уходит в историю */
+  | { type: "newTournament" }
   | { type: "reset" }
   | { type: "finish" }
   /** Поменять у идущего турнира, до какого уровня открыты ребаи (re-entry) и аддоны; 0 — нет */
@@ -120,7 +124,7 @@ export type TournamentAction =
       patch: Partial<
         Pick<
           Tournament,
-          "name" | "entries" | "playersLeft" | "rebuys" | "addons" | "doubleAddons" | "combination" | "ticker" | "tickerOn"
+          "name" | "entries" | "playersLeft" | "rebuys" | "addons" | "doubleAddons" | "burnedChips" | "combination" | "ticker" | "tickerOn"
         >
       >;
     };

@@ -62,11 +62,14 @@ function Find-Browser {
     return $null
 }
 
-# Закрыть окно табло (браузер с нашим отдельным профилем), не трогая обычный браузер
+# Закрыть ВСЕ окна табло (браузер с профилем табло из любой папки, полноэкранный 127.0.0.1),
+# не трогая обычный браузер. Иначе на телевизоре может остаться окно старой копии табло.
 function Stop-Kiosk {
-    $profileDir = $BrowserDir.ToLower()
     Get-CimInstance Win32_Process -Filter "Name='chrome.exe' OR Name='msedge.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -and $_.CommandLine.ToLower().Contains($profileDir) } |
+        Where-Object {
+            $cl = [string]$_.CommandLine
+            $cl -like '*browser-profile*' -or ($cl -like '*--kiosk*' -and $cl -match '127\.0\.0\.1|localhost')
+        } |
         ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 }
 

@@ -1,6 +1,7 @@
 // Отчёт владельцу после турнира — чистые функции: сдвиг мест в рейтинге и текст для мессенджера.
 // Данные собирает src/lib/db/report.ts; картинки рисует src/components/admin/ReportImages.tsx.
 
+import { EXPENSE_KINDS, EXPENSE_LABEL, expenseTotals, formatHours, type Expense } from "./expenses";
 import { formatRub, PAY_METHOD_LABEL, PAY_METHODS, type CashSummary } from "./cash";
 import type { Standing } from "./rating/standings";
 
@@ -27,6 +28,8 @@ export type TournamentReport = {
   };
   places: ReportPlace[];
   cash: { summary: CashSummary; debtors: { name: string; debt: number }[] } | null;
+  /** Расходы турнира: дилеры, админ, прочее */
+  expenses?: Expense[];
   /** Рейтинг периода, в который пошёл турнир; null — ни в какой рейтинг не попал */
   rating: { periodName: string; periodLabel: string; top: TopRow[]; participants: ParticipantRow[] } | null;
 };
@@ -93,6 +96,19 @@ export function reportText(r: TournamentReport) {
     );
     if (s.free > 0) lines.push(`Бесплатно ${formatRub(s.free)}`);
     if (s.overpaid > 0) lines.push(`Переплата ${formatRub(s.overpaid)}`);
+  }
+
+  if (r.expenses?.length) {
+    const ex = expenseTotals(r.expenses);
+    lines.push("", "РАСХОДЫ");
+    for (const k of EXPENSE_KINDS) {
+      const list = r.expenses.filter((e) => e.kind === k);
+      if (!list.length) continue;
+      const items = list.map((e) => `${e.name}${e.hours != null ? ` ${formatHours(e.hours)}` : ""} — ${formatRub(e.amount)}`);
+      lines.push(`${EXPENSE_LABEL[k]}: ${items.join(", ")}`);
+    }
+    const left = r.cash ? ` · остаётся ${formatRub(r.cash.summary.paid - ex.total)}` : "";
+    lines.push(`Всего расходов ${formatRub(ex.total)}${left}`);
   }
 
   if (!r.rating) lines.push("", "РЕЙТИНГ", "Турнир не попал в рейтинг (период не начат или турнир не идёт в рейтинг)");

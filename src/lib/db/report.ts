@@ -55,7 +55,7 @@ export function tournamentReport(db: DatabaseSync, tournamentId: number): Tourna
       };
     }
   }
-  return { tournament, places, cash, rating };
+  return { tournament, places, cash, expenses: d.expenses, rating };
 }
 
 // ---------- «Отчёт отправлен» (для напоминания админу) ----------

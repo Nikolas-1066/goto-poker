@@ -126,6 +126,7 @@ type TournamentRow = {
   rebuys: number;
   addons: number;
   double_addons: number;
+  burned_chips: number;
   updated_at: number;
 };
 
@@ -175,6 +176,7 @@ export function loadState(db: DatabaseSync): Db {
         rebuys: row.rebuys,
         addons: row.addons,
         doubleAddons: row.double_addons,
+        burnedChips: row.burned_chips ?? 0,
         combination: board.combination,
         ticker: board.ticker,
         tickerOn: board.ticker_on === 1,
@@ -246,6 +248,7 @@ export function writeState(db: DatabaseSync, prev: Db | null, next: Db) {
     rebuys: t.rebuys,
     addons: t.addons,
     double_addons: t.doubleAddons ?? 0,
+    burned_chips: t.burnedChips ?? 0,
     updated_at: t.updatedAt,
   };
   const updated = db
@@ -255,7 +258,7 @@ export function writeState(db: DatabaseSync, prev: Db | null, next: Db) {
         step_index = :step_index, step_ends_at = :step_ends_at, remaining_ms = :remaining_ms,
         elapsed_base_ms = :elapsed_base_ms, run_started_at = :run_started_at,
         entries = :entries, players_left = :players_left, rebuys = :rebuys, addons = :addons,
-        double_addons = :double_addons, updated_at = :updated_at,
+        double_addons = :double_addons, burned_chips = :burned_chips, updated_at = :updated_at,
         started_at  = CASE WHEN :status = 'idle' THEN NULL ELSE COALESCE(started_at, :updated_at) END,
         finished_at = CASE WHEN :status = 'finished' THEN COALESCE(finished_at, :updated_at) ELSE NULL END
       WHERE is_current = 1`)
@@ -263,10 +266,10 @@ export function writeState(db: DatabaseSync, prev: Db | null, next: Db) {
   if (updated.changes === 0) {
     db.prepare(`
       INSERT INTO tournaments (name, preset_id, structure_json, mode, status, step_index, step_ends_at, remaining_ms,
-                               elapsed_base_ms, run_started_at, entries, players_left, rebuys, addons, double_addons,
+                               elapsed_base_ms, run_started_at, entries, players_left, rebuys, addons, double_addons, burned_chips,
                                is_current, created_at, updated_at, started_at, finished_at)
       VALUES (:name, :preset_id, :structure_json, :mode, :status, :step_index, :step_ends_at, :remaining_ms,
-              :elapsed_base_ms, :run_started_at, :entries, :players_left, :rebuys, :addons, :double_addons,
+              :elapsed_base_ms, :run_started_at, :entries, :players_left, :rebuys, :addons, :double_addons, :burned_chips,
               1, :updated_at, :updated_at,
               CASE WHEN :status = 'idle' THEN NULL ELSE :updated_at END,
               CASE WHEN :status = 'finished' THEN :updated_at ELSE NULL END)`).run(values);

@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Собранный Windows-пакет и кэш сборки — не наш исходный код
     "dist/**",
+    // Скрипт для UPDATE.bat на ноутбуке — запускается голым node.exe (CommonJS), не часть приложения
+    "deploy/windows/scripts/*.cjs",
     "deploy/.cache/**",
   ]),
 ]);

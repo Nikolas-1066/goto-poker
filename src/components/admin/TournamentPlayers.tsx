@@ -425,6 +425,7 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
                 </Button>
               )}
               {!finished && p.addonEventId != null && <UndoAddon p={p} busy={busy} onCancel={(eventId) => act({ type: "cancel", eventId })} />}
+              {!finished && p.lastEntryEventId != null && <UndoEntry p={p} busy={busy} onCancel={(eventId) => act({ type: "cancel", eventId })} />}
             {addonOpen && !finished && p.addons + p.doubleAddons === 0 && (
                 <>
                   <Button disabled={busy} onClick={() => act({ type: "addon", participantId: p.id })} title="Аддон">
@@ -642,6 +643,9 @@ function BustPanel({
   const [split, setSplit] = useState(false);
   const [picked, setPicked] = useState<number[]>([]);
   const [addingBusted, setAddingBusted] = useState(false);
+  /** «Без нокаута»: ушёл сам — можно вписать, сколько фишек сжёг */
+  const [noKo, setNoKo] = useState(false);
+  const [burned, setBurned] = useState("");
 
   const byId = new Map(playing.map((p) => [p.id, p]));
   // сначала — игроки с того же стола, что и вылетевший
@@ -653,11 +657,11 @@ function BustPanel({
   const from = left - busted.length + 1;
   const placeText = busted.length === 1 ? `${left} место` : `места ${from}–${left}`;
 
-  function submit(knockers: number[]) {
+  function submit(knockers: number[], burnedChips = 0) {
     let order = 1;
     const list = busted.map((id, i) => {
       if (i > 0 && !sameAsPrev.has(id)) order += 1;
-      return { participantId: id, handOrder: order };
+      return { participantId: id, handOrder: order, ...(burnedChips > 0 && busted.length === 1 ? { burned: burnedChips } : {}) };
     });
     onSubmit({ type: "bust", busted: list, knockers });
   }
@@ -716,7 +720,33 @@ function BustPanel({
         </div>
       )}
 
-      {addingBusted ? (
+      {noKo ? (
+        <div className="space-y-2">
+          <div className="text-sm font-semibold">Без нокаута</div>
+          {busted.length === 1 && (
+            <label className="block">
+              <span className="text-sm text-slate-300">Сжёг стек — сколько фишек? (пусто — фишек не было)</span>
+              <input
+                className={`${inputClass} mt-1 text-lg`}
+                inputMode="numeric"
+                autoFocus
+                placeholder="например, 12 500"
+                value={burned ? Number(burned).toLocaleString("ru-RU") : ""}
+                onChange={(e) => setBurned(e.target.value.replace(/\D/g, "").slice(0, 9))}
+              />
+              <span className="mt-1 block text-xs text-slate-500">Эти фишки уйдут из игры — средний стек на табло пересчитается.</span>
+            </label>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="ghost" onClick={() => setNoKo(false)}>
+              Назад
+            </Button>
+            <Button variant="primary" disabled={busy} onClick={() => submit([], Number(burned) || 0)}>
+              {Number(burned) > 0 ? "Сжёг стек — готово" : "Вылет без нокаута"}
+            </Button>
+          </div>
+        </div>
+      ) : addingBusted ? (
         <div>
           <div className="mb-1 text-sm font-semibold">Кто ещё вылетел в этой раздаче?</div>
           <div className="divide-y divide-white/[0.06]">
@@ -778,8 +808,8 @@ function BustPanel({
             <Button disabled={candidates.length < 2} onClick={() => setAddingBusted(true)}>
               + Ещё вылетел
             </Button>
-            <Button disabled={busy} onClick={() => submit([])}>
-              Без нокаута
+            <Button disabled={busy} onClick={() => setNoKo(true)}>
+              Без нокаута / сжёг стек
             </Button>
             <Button variant="ghost" onClick={onCancel}>
               Отмена
@@ -837,6 +867,24 @@ function DealPanel({
         </Button>
       </div>
     </div>
+  );
+}
+
+/** Отменить «Пришёл» / re-entry — если нажали не тому игроку (мисклик) */
+function UndoEntry({ p, busy, onCancel }: { p: ParticipantView; busy: boolean; onCancel: (eventId: number) => void }) {
+  const reentry = p.lastEntryType === "reentry";
+  const text = reentry
+    ? `Отменить re-entry: ${p.name}? Игрок вернётся в вылетевшие.`
+    : `Отменить «Пришёл»: ${p.name}? Игрок вернётся в список записавшихся.`;
+  return (
+    <Button
+      variant="ghost"
+      title={reentry ? "Отменить re-entry" : "Отменить «Пришёл» (мисклик)"}
+      disabled={busy}
+      onClick={() => window.confirm(text) && onCancel(p.lastEntryEventId!)}
+    >
+      ↺ {reentry ? "RE" : "вход"}
+    </Button>
   );
 }
 

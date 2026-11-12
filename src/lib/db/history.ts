@@ -5,8 +5,10 @@
 import type { DatabaseSync } from "node:sqlite";
 import { tournamentPoints, type TournamentKind } from "../rating/points";
 import { computeResults } from "../results";
-import type { ByMethod, CashSummary } from "../cash";
+import type { ByMethod, CashSummary, PlayerCash } from "../cash";
 import { tournamentCash } from "./cash";
+import { expenseNames, listExpenses } from "./expenses";
+import type { Expense, ExpenseKind } from "../expenses";
 import { recomputeElo } from "./elo";
 import { currentRules, rulesById, type RulesVersion } from "./rules";
 import { audit } from "./sqlite";
@@ -155,6 +157,8 @@ export type CashRow = {
   paid: number;
   byMethod: ByMethod;
   debt: number;
+  /** Начисления и оплаты — для исправления кассы после турнира */
+  cash: PlayerCash;
 };
 
 export type TournamentDetails = HistoryItem & {
@@ -164,6 +168,9 @@ export type TournamentDetails = HistoryItem & {
   rulesId: number | null;
   /** Касса турнира по игрокам (docs/CASH.md); null — денег в турнире не было */
   cashReport: { summary: CashSummary; players: CashRow[] } | null;
+  /** Расходы турнира (дилеры, админ, прочее) и подсказки имён */
+  expenses: Expense[];
+  expenseNames: Record<ExpenseKind, string[]>;
 };
 
 export function getTournamentDetails(db: DatabaseSync, id: number): TournamentDetails | null {
@@ -197,6 +204,14 @@ export function getTournamentDetails(db: DatabaseSync, id: number): TournamentDe
     name: string;
   }[];
   const finished = item.status === "finished";
+  // аддоны — прямо из журнала (в т.ч. исправленные после турнира)
+  const addonRows = db
+    .prepare(
+      `SELECT participant_id AS pid, SUM(type = 'addon') AS a, SUM(type = 'double_addon') AS d
+       FROM events WHERE tournament_id = ? AND cancelled_at IS NULL GROUP BY participant_id`,
+    )
+    .all(id) as { pid: number; a: number; d: number }[];
+  const addonsOf = new Map(addonRows.map((r) => [r.pid, r]));
   const results = rows
     .map((r): ResultRow => {
       const x = res.participants.get(r.id);
@@ -208,8 +223,8 @@ export function getTournamentDetails(db: DatabaseSync, id: number): TournamentDe
         place: finished ? r.place : (x?.place ?? null),
         placeTo: finished ? r.place_to : (x?.placeTo ?? null),
         entries: finished ? r.entries : (x?.entries ?? 0),
-        addons: x?.addons ?? 0,
-        doubleAddons: x?.doubleAddons ?? 0,
+        addons: Number(addonsOf.get(r.id)?.a ?? x?.addons ?? 0),
+        doubleAddons: Number(addonsOf.get(r.id)?.d ?? x?.doubleAddons ?? 0),
         ko: finished ? r.ko : (x?.ko ?? 0),
         points: finished ? r.points : null,
         eloBefore: r.elo_before,
@@ -223,6 +238,8 @@ export function getTournamentDetails(db: DatabaseSync, id: number): TournamentDe
     results,
     rulesId: finished ? t.rules_id : null,
     cashReport: detailsCash(db, id),
+    expenses: listExpenses(db, id),
+    expenseNames: expenseNames(db),
   };
 }
 
@@ -240,6 +257,7 @@ function detailsCash(db: DatabaseSync, id: number) {
       paid: c.paid,
       byMethod: c.byMethod,
       debt: c.debt,
+      cash: c,
     }),
   );
   rows.sort((a, b) => b.debt - a.debt || a.name.localeCompare(b.name, "ru"));
@@ -248,7 +266,8 @@ function detailsCash(db: DatabaseSync, id: number) {
 
 // ---------- Исправление итогов ----------
 
-export type ResultCorrection = { participantId: number; place: number; ko: number; entries: number };
+/** addon: 0 — не брал, 1 — аддон, 2 — двойной; не указан — не меняем */
+export type ResultCorrection = { participantId: number; place: number; ko: number; entries: number; addon?: 0 | 1 | 2 };
 
 /**
  * Проверить исправленные места: каждое место — целое от 1 до N; одинаковые места — делёж
@@ -292,7 +311,15 @@ export function correctResults(db: DatabaseSync, tournamentId: number, rows: unk
 
   const list: ResultCorrection[] = rows.map((raw) => {
     const r = (raw ?? {}) as Record<string, unknown>;
-    return { participantId: Number(r.participantId), place: Number(r.place), ko: Number(r.ko), entries: Number(r.entries) };
+    const addon = r.addon === undefined || r.addon === null || r.addon === "" ? undefined : Number(r.addon);
+    if (addon !== undefined && addon !== 0 && addon !== 1 && addon !== 2) throw new Error("Аддон: нет, обычный или двойной");
+    return {
+      participantId: Number(r.participantId),
+      place: Number(r.place),
+      ko: Number(r.ko),
+      entries: Number(r.entries),
+      ...(addon !== undefined ? { addon: addon as 0 | 1 | 2 } : {}),
+    };
   });
   if (list.length !== current.length || list.some((r) => !byId.has(r.participantId)) || new Set(list.map((r) => r.participantId)).size !== list.length) {
     throw new Error("Нужно указать места всех участников турнира");
@@ -321,13 +348,83 @@ export function correctResults(db: DatabaseSync, tournamentId: number, rows: unk
     }
     upd.run(r.place, placeTo, r.ko, r.entries, r.participantId);
   }
-  if (changes.length) audit(db, "tournament.correct", { tournamentId, changes }, now);
+  // re-entry и аддоны — ещё и в журнале: так касса начислит или снимет их цену
+  const cashChanges = syncEntriesAndAddons(db, tournamentId, list, now);
+  if (changes.length || cashChanges.length) audit(db, "tournament.correct", { tournamentId, changes, cashChanges }, now);
   // очки — по той же версии правил, по которой турнир уже был посчитан (правила задним числом не меняем)
   const own = db.prepare("SELECT rules_id FROM tournaments WHERE id = ?").get(tournamentId) as { rules_id: number | null };
   scoreTournament(db, tournamentId, (own.rules_id != null && rulesById(db, own.rules_id)) || currentRules(db, now));
   // ELO этого турнира и всех после него
   recomputeElo(db, now);
-  return changes.length;
+  return changes.length + cashChanges.length;
+}
+
+/**
+ * Привести журнал к исправленным итогам: число re-entry = входов − 1, аддон — как указали.
+ * Лишние re-entry / аддоны отменяются (последние), недостающие дописываются с ценой из цен турнира
+ * (касса сразу начислит их игроку). На места и очки журнал завершённого турнира не влияет.
+ */
+function syncEntriesAndAddons(db: DatabaseSync, tournamentId: number, list: ResultCorrection[], now: number) {
+  const t = db.prepare("SELECT structure_json, finished_at FROM tournaments WHERE id = ?").get(tournamentId) as {
+    structure_json: string | null;
+    finished_at: number | null;
+  };
+  let prices = { reentry: 0, addon: 0, doubleAddon: 0 };
+  try {
+    const p = t.structure_json ? JSON.parse(t.structure_json).prices : null;
+    if (p) prices = { reentry: Number(p.reentry) || 0, addon: Number(p.addon) || 0, doubleAddon: Number(p.doubleAddon) || 0 };
+  } catch {
+    /* старый турнир без цен */
+  }
+  const at = t.finished_at ?? now;
+  const active = db.prepare(
+    "SELECT id, type FROM events WHERE participant_id = ? AND cancelled_at IS NULL AND type IN ('reentry', 'addon', 'double_addon') ORDER BY at DESC, id DESC",
+  );
+  const cancel = db.prepare("UPDATE events SET cancelled_at = ? WHERE id = ?");
+  const insert = db.prepare("INSERT INTO events (tournament_id, participant_id, type, at, price) VALUES (?, ?, ?, ?, ?)");
+  const changes: { participantId: number; what: string }[] = [];
+  for (const r of list) {
+    const ev = active.all(r.participantId) as { id: number; type: string }[];
+    // re-entry
+    const re = ev.filter((e) => e.type === "reentry");
+    const want = Math.max(0, r.entries - 1);
+    for (const e of re.slice(0, Math.max(0, re.length - want))) {
+      cancel.run(now, e.id);
+      changes.push({ participantId: r.participantId, what: "re-entry отменён" });
+    }
+    for (let i = re.length; i < want; i++) {
+      insert.run(tournamentId, r.participantId, "reentry", at, prices.reentry);
+      changes.push({ participantId: r.participantId, what: "re-entry добавлен" });
+    }
+    // аддон
+    if (r.addon === undefined) continue;
+    const wantType = r.addon === 1 ? "addon" : r.addon === 2 ? "double_addon" : null;
+    const addons = ev.filter((e) => e.type === "addon" || e.type === "double_addon");
+    let keep = false;
+    for (const e of addons) {
+      if (!keep && e.type === wantType) {
+        keep = true;
+        continue;
+      }
+      cancel.run(now, e.id);
+      changes.push({ participantId: r.participantId, what: `${e.type === "addon" ? "аддон" : "двойной аддон"} отменён` });
+    }
+    if (wantType && !keep) {
+      insert.run(tournamentId, r.participantId, wantType, at, wantType === "addon" ? prices.addon : prices.doubleAddon);
+      changes.push({ participantId: r.participantId, what: `${wantType === "addon" ? "аддон" : "двойной аддон"} добавлен` });
+    }
+  }
+  if (changes.length) {
+    // счётчики турнира (для выгрузки и ручного режима)
+    const c = db
+      .prepare(
+        `SELECT SUM(type = 'reentry') AS re, SUM(type = 'addon') AS a, SUM(type = 'double_addon') AS d
+         FROM events WHERE tournament_id = ? AND cancelled_at IS NULL`,
+      )
+      .get(tournamentId) as { re: number | null; a: number | null; d: number | null };
+    db.prepare("UPDATE tournaments SET rebuys = ?, addons = ?, double_addons = ? WHERE id = ?").run(c.re ?? 0, c.a ?? 0, c.d ?? 0, tournamentId);
+  }
+  return changes;
 }
 
 // ---------- Очки рейтинга ----------

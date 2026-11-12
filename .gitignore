@@ -49,3 +49,6 @@ next-env.d.ts
 /Claude outputs
 /dist
 /deploy/.cache
+
+# лог сборки пакета
+/build-windows.log

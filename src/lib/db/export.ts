@@ -10,6 +10,8 @@ import type { CellValue, Sheet } from "../xlsx";
 import { debtsByPlayer, tournamentCash } from "./cash";
 import { listPeriods, standingsOf, type Period } from "./periods";
 import { loadStatsData } from "./stats";
+import { allExpenses } from "./expenses";
+import { EXPENSE_LABEL } from "../expenses";
 
 const date = (ts: number) => new Date(ts).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
 const dateTime = (ts: number) =>
@@ -33,6 +35,11 @@ export function exportSheets(db: DatabaseSync, range: Range, title: string): She
       ...(["cash", "card", "transfer"] as PayMethod[]).map((m): CellValue[] => [`  ${PAY_METHOD_LABEL[m]}, ₽`, s.byMethod[m]]),
       ["Долги за турниры периода, ₽", s.debt],
       ["Бесплатно, ₽", s.free],
+      ["Расходы, ₽", s.expenses],
+      ["  Дилеры, ₽", s.expensesByKind.dealer],
+      ["  Админ, ₽", s.expensesByKind.admin],
+      ["  Прочее, ₽", s.expensesByKind.other],
+      ["Собрано − расходы, ₽", s.profit],
       ["Турниров", s.tournaments],
       ["Разных игроков", s.players],
       ["В среднем игроков на турнир", s.avgPlayers],
@@ -239,5 +246,32 @@ export function exportSheets(db: DatabaseSync, range: Range, title: string): She
     ],
   };
 
-  return [summary, tournamentsSheet, places, cash, debts, playersSheet, rating];
+  // ---- Расходы: кому сколько заплатили и сколько часов (по турнирам периода)
+  const expenseRows = allExpenses(db)
+    .filter((e) => e.tournamentAt >= range.from && e.tournamentAt < range.to)
+    .sort((a, b) => a.tournamentAt - b.tournamentAt || a.id - b.id);
+  const tTitle = new Map(
+    (db.prepare("SELECT id, name FROM tournaments").all() as { id: number; name: string }[]).map((t) => [t.id, t.name]),
+  );
+  const expensesSheet: Sheet = {
+    name: "Расходы",
+    widths: [12, 26, 10, 22, 8, 12, 24],
+    rows: [
+      ["Дата", "Турнир", "Тип", "Кому / на что", "Часов", "Сумма, ₽", "Комментарий"],
+      ...expenseRows.map((e): CellValue[] => [
+        date(e.tournamentAt),
+        tTitle.get(e.tournamentId) ?? "",
+        EXPENSE_LABEL[e.kind],
+        e.name,
+        e.hours ?? "",
+        e.amount,
+        e.note,
+      ]),
+      [],
+      ["Итого по людям", "", "Тип", "Имя", "Часов", "Сумма, ₽", "Смен"],
+      ...s.staff.map((r): CellValue[] => ["", "", EXPENSE_LABEL[r.kind], r.name, r.hours, r.amount, r.shifts]),
+    ],
+  };
+
+  return [summary, tournamentsSheet, places, cash, debts, expensesSheet, playersSheet, rating];
 }

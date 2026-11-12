@@ -35,6 +35,7 @@ function hookFor(action: TournamentAction | null): WriteHook | undefined {
   switch (action?.type) {
     // новая структура — новый турнир (старый, если в нём играли, уходит в историю)
     case "loadPreset":
+    case "newTournament":
       return (sqlite) => void archiveCurrentIfUsed(sqlite);
     // сброс — очистить журнал входов/вылетов, записавшиеся остаются
     case "reset":

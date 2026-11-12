@@ -60,13 +60,17 @@ export function tournamentCash(db: DatabaseSync, tournamentId: number) {
   return { players, summary: cashSummary(players.values()) };
 }
 
-/** Принять оплату от игрока за турнир (не больше его долга по этому турниру) */
+/**
+ * Принять оплату от игрока за турнир (не больше его долга по этому турниру).
+ * allowOverpay — исправление кассы в истории: фактически занёс больше, чем начислено.
+ */
 export function addPayment(
   db: DatabaseSync,
   p: { tournamentId: number; playerId: number; amount: number; method: PayMethod },
   now = Date.now(),
+  opts: { allowOverpay?: boolean } = {},
 ) {
-  const debt = tournamentCash(db, p.tournamentId).players.get(p.playerId)?.debt ?? 0;
+  const debt = opts.allowOverpay ? Number.MAX_SAFE_INTEGER : (tournamentCash(db, p.tournamentId).players.get(p.playerId)?.debt ?? 0);
   const error = checkPayment(p.amount, p.method, debt);
   if (error) throw new Error(error);
   const id = Number(

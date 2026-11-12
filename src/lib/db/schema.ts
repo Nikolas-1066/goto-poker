@@ -208,4 +208,24 @@ export const MIGRATIONS: string[] = [
   CREATE INDEX payments_tournament ON payments (tournament_id);
   CREATE INDEX payments_player ON payments (player_id);
   `,
+  // 4 — «сжёг стек»: игрок уходит сам, его фишки убирают из игры. Админ вписывает, сколько фишек
+  // сожжено, — они вычитаются из общего числа фишек, чтобы средний стек на табло был честным.
+  `
+  ALTER TABLE events ADD COLUMN burned INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE tournaments ADD COLUMN burned_chips INTEGER NOT NULL DEFAULT 0;
+  `,
+  // 5 — расходы турнира: дилеры, админ, прочее — кому сколько заплатили и сколько часов отработали
+  `
+  CREATE TABLE expenses (
+    id            INTEGER PRIMARY KEY,
+    tournament_id INTEGER NOT NULL REFERENCES tournaments (id) ON DELETE CASCADE,
+    kind          TEXT NOT NULL CHECK (kind IN ('dealer', 'admin', 'other')),
+    name          TEXT NOT NULL,
+    hours         REAL,
+    amount        INTEGER NOT NULL DEFAULT 0 CHECK (amount >= 0),
+    note          TEXT NOT NULL DEFAULT '',
+    at            INTEGER NOT NULL
+  );
+  CREATE INDEX expenses_tournament ON expenses (tournament_id);
+  `,
 ];

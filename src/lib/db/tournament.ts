@@ -66,6 +66,9 @@ export type ParticipantView = {
   knockedOutBy: string[];
   /** Аддон игрока — для отмены в любой момент */
   addonEventId: number | null;
+  /** Последний вход / re-entry игрока в игре — для отмены мисклика «Пришёл» */
+  lastEntryEventId: number | null;
+  lastEntryType: "entry" | "reentry" | null;
   /** Очки рейтинга и ELO до/после (после завершения турнира) */
   points: number | null;
   eloBefore: number | null;
@@ -90,7 +93,12 @@ export type PlayerAction =
    * Вылет. Один игрок или несколько в одной раздаче (handOrder: 1 — больший стек,
    * одинаковый — равные стеки). knockers: никого (ушёл сам), один или двое (делёж банка, по 0,5).
    */
-  | { type: "bust"; busted: { participantId: number; handOrder: number }[]; knockers: number[] }
+  | {
+      type: "bust";
+      /** burned — сколько фишек игрок сжёг (ушёл сам, без нокаута); вычитается из среднего стека */
+      busted: { participantId: number; handOrder: number; burned?: number }[];
+      knockers: number[];
+    }
   /** Отменить действие; вылет в общей раздаче отменяется целиком */
   | { type: "cancel"; eventId: number }
   /** Посадить за стол (1–3) и место (1–10); null — убрать. Без автобалансировки */
@@ -202,6 +210,10 @@ export function listParticipants(db: DatabaseSync, tournamentId: number, finishe
   const list = rows.map((r): ParticipantView => {
     const x = res.participants.get(r.id);
     const bust = x?.lastBustId != null ? journal.find((e) => e.id === x.lastBustId) : undefined;
+    const lastIn =
+      x?.status === "playing"
+        ? [...journal].reverse().find((e) => e.participantId === r.id && !e.cancelled && (e.type === "entry" || e.type === "reentry"))
+        : undefined;
     return {
       id: r.id,
       playerId: r.player_id,
@@ -222,6 +234,8 @@ export function listParticipants(db: DatabaseSync, tournamentId: number, finishe
       seatNo: r.seat_no,
       lastBustEventId: x?.lastBustId ?? null,
       addonEventId: x?.addonEventId ?? null,
+      lastEntryEventId: lastIn?.id ?? null,
+      lastEntryType: lastIn ? (lastIn.type as "entry" | "reentry") : null,
       points: finished ? r.points : null,
       eloBefore: finished ? r.elo_before : null,
       eloAfter: finished ? r.elo_after : null,
@@ -416,14 +430,23 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
           : null;
       const shares = knockerShares(knockers);
       const ko = db.prepare("INSERT INTO knockouts (bust_event_id, knocker_participant_id, share) VALUES (?, ?, ?)");
+      const burnedOf = (b: { burned?: unknown }) => Math.min(100_000_000, Math.max(0, Math.round(Number(b.burned) || 0)));
+      if (knockers.length && busted.some((b) => burnedOf(b) > 0)) {
+        throw new Error("Сжечь стек можно только при вылете без нокаута");
+      }
       for (const b of busted) {
         const order = Math.max(1, Math.round(Number(b.handOrder) || 1));
         const id = addEvent(b.participantId, "bust", hand != null ? { id: hand, order } : undefined);
         for (const k of shares) ko.run(id, k.participantId, k.share);
+        if (burnedOf(b) > 0) db.prepare("UPDATE events SET burned = ? WHERE id = ?").run(burnedOf(b), id);
         undoEventId ??= id;
       }
       const res = computeResults(journal());
-      const who = busted.map((b) => `${name(b.participantId)} — ${formatPlace(res.participants.get(b.participantId)!)} место`);
+      const who = busted.map(
+        (b) =>
+          `${name(b.participantId)} — ${formatPlace(res.participants.get(b.participantId)!)} место` +
+          (burnedOf(b) > 0 ? `, сжёг стек ${burnedOf(b).toLocaleString("ru-RU")}` : ""),
+      );
       message = `${who.join(", ")}${knockers.length ? `, KO: ${knockers.map(name).join(" и ")}` : ""}`;
       break;
     }
@@ -635,7 +658,17 @@ export function syncTournament(db: DatabaseSync, next: Db, now = Date.now()) {
       upd.run(r?.status ?? "registered", r?.entries ?? 0, p.id);
     }
   }
-  if (t.mode === "players") Object.assign(t, res.counters);
+  if (t.mode === "players") {
+    Object.assign(t, res.counters);
+    // сожжённые фишки — сумма по не отменённым вылетам «сжёг стек»
+    t.burnedChips = Number(
+      (
+        db
+          .prepare("SELECT COALESCE(SUM(burned), 0) AS s FROM events WHERE tournament_id = ? AND type = 'bust' AND cancelled_at IS NULL")
+          .get(cur.id) as { s: number }
+      ).s,
+    );
+  }
   t.updatedAt = Math.max(now, t.updatedAt + 1);
 }
 

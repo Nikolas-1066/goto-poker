@@ -99,7 +99,7 @@ describe("данные статистики из базы", () => {
 
     // выгрузка в Excel за октябрь
     const sheets = exportSheets(db, periodRange("2026-10")!, "Октябрь 2026");
-    expect(sheets.map((x) => x.name)).toEqual(["Сводка", "Турниры", "Места", "Касса", "Долги", "Игроки", "Рейтинг"]);
+    expect(sheets.map((x) => x.name)).toEqual(["Сводка", "Турниры", "Места", "Касса", "Долги", "Расходы", "Игроки", "Рейтинг"]);
     const sheet = (name: string) => sheets.find((x) => x.name === name)!.rows;
     expect(sheet("Сводка")[1]).toEqual(["Собрано, ₽", 1500]);
     expect(sheet("Турниры")).toHaveLength(2); // заголовок + один завершённый турнир (брошенный не входит)

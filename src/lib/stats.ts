@@ -2,6 +2,7 @@
 // Периоды — по местному времени: месяц «2026-10», год «2026».
 
 import type { ByMethod, PayMethod } from "./cash";
+import type { ExpenseKind } from "./expenses";
 
 export type StatsTournament = {
   id: number;
@@ -35,7 +36,14 @@ export type StatsData = {
   cash: StatsTournamentCash[];
   /** Первый визит игроков */
   firstVisits: number[];
+  /** Расходы турниров (дилеры, админ, прочее) — по дате турнира */
+  expenses?: StatsExpense[];
 };
+
+export type StatsExpense = { tournamentId: number; tournamentAt: number; kind: ExpenseKind; name: string; hours: number | null; amount: number };
+
+/** Кому сколько заплатили за период: смен (турниров), часов, денег */
+export type StaffRow = { kind: ExpenseKind; name: string; shifts: number; hours: number; amount: number };
 
 export type Range = { from: number; to: number };
 
@@ -45,6 +53,13 @@ export type WeekdayRow = { weekday: number; tournaments: number; avgPlayers: num
 
 export type StatsSummary = {
   paid: number;
+  /** Расходы турниров периода (по дате турнира) */
+  expenses: number;
+  expensesByKind: Record<ExpenseKind, number>;
+  /** Собрано − расходы */
+  profit: number;
+  /** Дилеры и админы: смены, часы, сколько заплатили */
+  staff: StaffRow[];
   byMethod: ByMethod;
   debt: number;
   free: number;
@@ -107,6 +122,10 @@ export function computeStats(data: StatsData, range: Range): StatsSummary {
 
   const s: StatsSummary = {
     paid: 0,
+    expenses: 0,
+    expensesByKind: { dealer: 0, admin: 0, other: 0 },
+    profit: 0,
+    staff: [],
     byMethod: { cash: 0, card: 0, transfer: 0 },
     debt: 0,
     free: 0,
@@ -134,6 +153,26 @@ export function computeStats(data: StatsData, range: Range): StatsSummary {
     money.set(p.playerId, row);
   }
   s.topByMoney = top(money);
+
+  // расходы — по дате турнира
+  const staff = new Map<string, StaffRow & { t: Set<number> }>();
+  for (const e of data.expenses ?? []) {
+    if (!inRange(e.tournamentAt, range)) continue;
+    s.expenses += e.amount;
+    s.expensesByKind[e.kind] += e.amount;
+    if (e.kind === "other") continue;
+    const key = `${e.kind}:${e.name.trim().toLowerCase()}`;
+    const row = staff.get(key) ?? { kind: e.kind, name: e.name.trim(), shifts: 0, hours: 0, amount: 0, t: new Set<number>() };
+    row.t.add(e.tournamentId);
+    row.shifts = row.t.size;
+    row.hours = Math.round((row.hours + (e.hours ?? 0)) * 100) / 100;
+    row.amount += e.amount;
+    staff.set(key, row);
+  }
+  s.staff = [...staff.values()]
+    .map(({ t: _t, ...r }) => (void _t, r))
+    .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "dealer" ? -1 : 1) || b.amount - a.amount || a.name.localeCompare(b.name, "ru"));
+  s.profit = s.paid - s.expenses;
 
   // долги и бесплатно — по турнирам периода
   const paidFor = new Map<number, number>(); // собрано за турнир (для дней недели)
@@ -215,6 +254,7 @@ export function periodsOf(data: StatsData, unit: PeriodUnit) {
   for (const t of data.tournaments) keys.add(periodKey(t.at, unit));
   for (const p of data.payments) keys.add(periodKey(p.at, unit));
   for (const at of data.firstVisits) keys.add(periodKey(at, unit));
+  for (const e of data.expenses ?? []) keys.add(periodKey(e.tournamentAt, unit));
   return [...keys].sort().reverse();
 }
 

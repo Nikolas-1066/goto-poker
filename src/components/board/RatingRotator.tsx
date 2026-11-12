@@ -122,15 +122,15 @@ export function RatingRotator({ updatedAt }: { updatedAt: number | undefined }) 
     return list;
   }, [data, perPage]);
 
-  // Расписание (docs/RATING.md, раздел 7): игроков турнира с нокаутами показываем чаще и дольше —
-  // они идут после каждого другого списка: игроки → месяц → игроки → очки за место → игроки → за всё время.
-  // Страница игроков — полное время (seconds; одна страница — в 1,5 раза дольше), страница рейтинга — 70%.
+  // Расписание (docs/RATING.md, раздел 7): нокауты турнира — после каждого рейтинга, но по ОДНОЙ странице
+  // за раз (страницы игроков чередуются), иначе при большом поле рейтинги почти не видны:
+  // игроки (стр. 1) → месяц → игроки (стр. 2) → очки за место → игроки (стр. 3) → за всё время → …
+  // Страница игроков — полное время (seconds), страница рейтинга — 80%.
   const seconds = data?.seconds ?? 25;
   const schedule = useMemo(() => {
     const full = seconds * 1000;
-    const short = Math.round(full * 0.7);
+    const short = Math.round(full * 0.8);
     const players = screens.map((s, i) => (s.group === "players" ? i : -1)).filter((i) => i >= 0);
-    const playerSteps = players.map((i) => ({ i, ms: players.length > 1 ? full : Math.round(full * 1.5) }));
     const groups: number[][] = [];
     screens.forEach((s, i) => {
       if (s.group === "players") return;
@@ -139,16 +139,27 @@ export function RatingRotator({ updatedAt }: { updatedAt: number | undefined }) 
       else groups.push([i]);
     });
     if (!players.length) return groups.flat().map((i) => ({ i, ms: full }));
-    if (!groups.length) return playerSteps;
-    return groups.flatMap((g) => [...playerSteps, ...g.map((i) => ({ i, ms: short }))]);
+    if (!groups.length) return players.map((i) => ({ i, ms: full }));
+    // столько «слотов», чтобы каждая страница игроков и каждый рейтинг показались хотя бы раз
+    const slots = groups.length * Math.max(1, Math.ceil(players.length / groups.length));
+    const out: { i: number; ms: number }[] = [];
+    for (let k = 0; k < slots; k++) {
+      out.push({ i: players[k % players.length], ms: full });
+      for (const i of groups[k % groups.length]) out.push({ i, ms: short });
+    }
+    return out;
   }, [screens, seconds]);
 
+  // Таймер зависит только от шага и длительности (числа), а не от объекта расписания:
+  // данные табло обновляются каждые 15 с, и пересоздание расписания не должно сбрасывать таймер
+  // (иначе экран «залипал» на нокаутах и рейтинги не показывались).
   const current = schedule.length ? schedule[step % schedule.length] : null;
+  const currentMs = current?.ms ?? 0;
   useEffect(() => {
-    if (!current) return;
-    const t = setTimeout(() => setStep((x) => x + 1), current.ms);
+    if (!currentMs) return;
+    const t = setTimeout(() => setStep((x) => x + 1), currentMs);
     return () => clearTimeout(t);
-  }, [current, step]);
+  }, [step, currentMs]);
   const screen = current ? screens[current.i] ?? null : null;
 
   if (!screen) {

@@ -354,6 +354,22 @@ function Control() {
             />
             <div className="mt-4 flex flex-wrap gap-2 border-t border-white/[0.07] pt-4">
               <Button
+                variant="primary"
+                disabled={!hasStructure}
+                onClick={() =>
+                  act(
+                    { type: "newTournament" },
+                    status === "finished"
+                      ? `Начать новый турнир по той же структуре («${tournament.structure?.name ?? ""}»)? Завершённый уходит в историю.`
+                      : status === "idle" && !tournament.entries
+                        ? `Начать новый турнир по той же структуре («${tournament.structure?.name ?? ""}»)? Если на текущий кто-то записан, запись не перенесётся.`
+                        : "Текущий турнир ещё не завершён! Начать новый? Текущий уйдёт в историю НЕЗАВЕРШЁННЫМ (без очков рейтинга). Обычно сначала нажимают «Завершить».",
+                  )
+                }
+              >
+                Начать новый
+              </Button>
+              <Button
                 variant="danger"
                 disabled={!hasStructure}
                 onClick={() =>
