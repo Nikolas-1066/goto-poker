@@ -3,7 +3,8 @@
 #   ./deploy/build-windows.sh
 # Результат: dist/GOTO-Poker-v1.N.zip — его копируете на ноутбук (флешка/Telegram).
 # Версия: deploy/VERSION хранит последнюю собранную (например, 1.4); каждая сборка прибавляет 1
-# к последнему числу (1.5, 1.6…). Новую «большую» версию задают руками: вписать 2.0 в deploy/VERSION.
+# к последнему числу (1.5, 1.6…). Новую «большую» версию задают при сборке:
+#   BUILD_VERSION=2.0 ./deploy/build-windows.sh   → соберётся ровно 2.0, следующие — 2.1, 2.2…
 # Внутри уже есть node.exe, на ноутбуке ничего устанавливать не нужно.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -15,7 +16,8 @@ CACHE=deploy/.cache
 
 # Версия: видна внизу табло, в названии архива и в окне обновления
 LAST=$(tr -d ' \r\n' < deploy/VERSION 2>/dev/null || echo "1.0")
-VERSION="${LAST%.*}.$(( ${LAST##*.} + 1 ))"
+VERSION="${BUILD_VERSION:-${LAST%.*}.$(( ${LAST##*.} + 1 ))}"
+if ! [[ $VERSION =~ ^[0-9]+\.[0-9]+$ ]]; then echo "Версия должна быть вида 2.0, а не «$VERSION»"; exit 1; fi
 BUILD_DATE=$(date '+%d.%m.%Y %H:%M')
 ZIP="GOTO-Poker-v$VERSION.zip"
 
