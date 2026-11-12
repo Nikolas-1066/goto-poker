@@ -9,10 +9,11 @@ import { debtWarning, formatRub, type CashSummary, type PayMethod } from "@/lib/
 import { formatEloDelta } from "@/lib/rating/elo";
 import { formatPlace } from "@/lib/results";
 import { phoneTail, searchPlayers, type Player } from "@/lib/players";
-import { formatSeat, MAX_SEATS, MAX_TABLES } from "@/lib/seating";
+import { DEFAULT_SEATING, formatSeat, MAX_SEATS, MAX_TABLES, type Seat, type SeatingSettings } from "@/lib/seating";
 import type { Tournament } from "@/lib/types";
 import { CashLine, CashPanel, EnterButtons, OldDebtBadge, OldDebtsPanel, PayBadge } from "./Cash";
 import { ReportBlock } from "./Report";
+import { SeatingLine, TablesView } from "./Tables";
 import { Button, inputClass } from "./ui";
 
 type FinalInfo = ReturnType<typeof finalInfo>;
@@ -47,6 +48,25 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
   /** У кого открыт долг с прошлых турниров */
   const [oldDebtOf, setOldDebtOf] = useState<number | null>(null);
   const [cashSummary, setCashSummary] = useState<CashSummary | null>(null);
+  /** Рассадка: настройки клуба и вид «Список / Столы» (запоминается на этом устройстве) */
+  const [seating, setSeating] = useState<SeatingSettings>(DEFAULT_SEATING);
+  const [view, setView] = useState<"list" | "tables">("list");
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (localStorage.getItem("goto-players-view") === "tables") setView("tables");
+    } catch {
+      // нет доступа к памяти браузера — просто список
+    }
+  }, []);
+  const chooseView = (v: "list" | "tables") => {
+    setView(v);
+    try {
+      localStorage.setItem("goto-players-view", v);
+    } catch {
+      // не страшно
+    }
+  };
   /** Есть цена входа — показываем «Пришёл + оплатил» */
   const withPay = (tournament.structure?.prices?.entry ?? 0) > 0;
   const enter = (target: { participantId: number } | { playerId: number }, pay?: PayMethod) =>
@@ -99,13 +119,13 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
         />
       ) : null,
   });
-  /** Подсказка после действия с кнопкой «Отменить» (10 секунд) */
-  const [toast, setToast] = useState<{ message: string; undoEventId: number | null } | null>(null);
+  /** Подсказка после действия с кнопкой «Отменить» (10 секунд); seat — куда посадили, крупно */
+  const [toast, setToast] = useState<{ message: string; undoEventId: number | null; seat: Seat | null } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  function showToast(message: string, undoEventId: number | null) {
+  function showToast(message: string, undoEventId: number | null, seat: Seat | null = null) {
     if (toastTimer.current) clearTimeout(toastTimer.current);
-    setToast(message ? { message, undoEventId } : null);
+    setToast(message ? { message, undoEventId, seat } : null);
     toastTimer.current = setTimeout(() => setToast(null), 10_000);
   }
 
@@ -116,6 +136,7 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
       setParticipants(data.participants);
       setFinal(data.final ?? null);
       setCashSummary(data.cash ?? null);
+      if (data.seating) setSeating(data.seating);
     }
     else setError(data.error ?? "Не удалось загрузить участников");
   }, []);
@@ -155,7 +176,7 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
         setError(data.error ?? "Ошибка");
         return false;
       }
-      showToast(data.message ?? "", action.type === "cancel" ? null : (data.undoEventId ?? null));
+      showToast(data.message ?? "", action.type === "cancel" ? null : (data.undoEventId ?? null), data.seat ?? null);
       onChanged();
       await loadParticipants();
       return true;
@@ -211,7 +232,14 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
     <div className="space-y-4">
       {toast && (
         <div className="fixed inset-x-3 bottom-24 z-40 mx-auto flex max-w-md items-center gap-3 rounded-xl border border-white/10 bg-[#16212d] px-4 py-3 shadow-2xl lg:bottom-6">
-          <div className="min-w-0 flex-1 text-sm">{toast.message}</div>
+          <div className="min-w-0 flex-1 text-sm">
+            {toast.seat && (
+              <div className="text-xl font-black tabular-nums text-amber-300">
+                Стол {toast.seat.tableNo} · Место {toast.seat.seatNo}
+              </div>
+            )}
+            {toast.message}
+          </div>
           {toast.undoEventId != null && (
             <Button
               variant="ghost"
@@ -353,6 +381,24 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
 
       {error && <div className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>}
 
+      {!finished && (
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-1 rounded-xl bg-white/[0.03] p-1">
+            {(["list", "tables"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => chooseView(v)}
+                className={`rounded-lg py-2 text-sm ${view === v ? "bg-white/[0.1] font-bold text-white" : "text-slate-400"}`}
+              >
+                {v === "list" ? "Список" : "Столы"}
+              </button>
+            ))}
+          </div>
+          {view === "tables" && <SeatingLine seating={seating} busy={busy} act={act} />}
+        </div>
+      )}
+
       {finished && (
         <Section title="Итоги турнира">
           <div className="py-2">
@@ -409,7 +455,28 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
               }}
             />
           )}
-          {playing.map((p) => (
+          {view === "tables" && (
+            <div className="py-2">
+              <TablesView
+                people={participants.filter((p) => p.status !== "busted")}
+                seating={seating}
+                started={tournament.status !== "idle"}
+                addonOpen={addonOpen}
+                canBust={playing.length > 1}
+                busy={busy}
+                act={act}
+                onBust={(p) => {
+                  setBustOf(p);
+                  setError("");
+                  window.scrollTo({ top: (document.getElementById("players")?.offsetTop ?? 0) - 60, behavior: "smooth" });
+                }}
+                onEnter={(p) => enter({ participantId: p.id })}
+                cashPanel={(p) => cashable(p).cashPanel}
+                onToggleCash={(p) => setCashOf(cashOf === p.id ? null : p.id)}
+              />
+            </div>
+          )}
+          {view === "list" && playing.map((p) => (
             <Row key={p.id} p={p} {...seatable(p)} {...cashable(p)}>
               {!finished && playing.length > 1 && (
                 <Button

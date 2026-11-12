@@ -16,6 +16,7 @@ Telegram Mini App для игроков. Архитектуру делать т�
   и рейтинга на табло. Делать строго по ним; всё, чего там нет, — спросить.
 - `docs/CASH.md` — утверждённые правила кассы (цены, оплаты, бесплатно, долги).
 - `docs/STATS.md` — правила подсчёта статистики клуба.
+- `docs/SEATING.md` — правила рассадки за столами (автопосадка, стек, подсказки).
 
 ## Что уже сделано и работает (не ломать!)
 
@@ -61,6 +62,10 @@ Telegram Mini App для игроков. Архитектуру делать т�
   Подсчёт — чистые функции `src/lib/stats.ts`, данные — `src/lib/db/stats.ts`, API — `/api/stats?period=`.
   Там же (только владельцу): «Excel» — `/api/stats/export?period=` (`src/lib/db/export.ts`, запись .xlsx без библиотек —
   `src/lib/xlsx.ts`) и «Копия базы» — `/api/backup` (`copyForDownload`: VACUUM INTO во временный файл).
+- Рассадка (`docs/SEATING.md`): чистые функции `src/lib/seating.ts` (`pickSeat`, `playerStack`, `seatingHint`),
+  настройки клуба `src/lib/db/seating.ts` (settings «seating»), посчитанный стек — `participants.stack_count(_at)`
+  (миграция 6); действия `autoSeat` / `seatMany` / `setSeating` / `setStack`, автопосадка при «Пришёл» и re-entry
+  в `tournament.ts`. UI — `src/components/admin/Tables.tsx` (вид «Столы» в карточке «Игроки»).
 - Отчёт владельцу после турнира: `src/lib/report.ts` (сдвиг мест, текст), `src/lib/db/report.ts`, `/api/report`;
   UI `src/components/admin/Report.tsx` (текст + «Скопировать» работает и по http, напоминание до копирования)
   и `ReportImages.tsx` (3 картинки на canvas без кассы). В карточке «Игроки» после завершения и в «Истории».
