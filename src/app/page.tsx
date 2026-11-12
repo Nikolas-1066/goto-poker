@@ -8,7 +8,8 @@ import { playBreakStart, playLevelChange, playTick, playWarning, unlockAudio } f
 import type { Tournament } from "@/lib/types";
 import { useTournament } from "@/lib/useTournament";
 import { useTvMode } from "@/lib/useTvMode";
-import { RatingRotator } from "@/components/board/RatingRotator";
+import { ChipLeaders, countedLabel } from "@/components/board/ChipLeaders";
+import { RatingRotator, useBoardRating } from "@/components/board/RatingRotator";
 
 /** Сколько секунд показывать заставку BLINDS UP после начала уровня */
 const BLINDS_UP_MS = 6000;
@@ -479,7 +480,7 @@ function MainBoard({
 
         {/* РЕЙТИНГ: экраны по очереди (RATING.md, раздел 7) */}
         <Panel className="flex min-h-[18rem] flex-1 flex-col overflow-hidden p-5 lg:min-h-0 xl:p-6">
-          <RatingRotator updatedAt={tournament?.updatedAt} />
+          <RatingRotator updatedAt={tournament?.updatedAt} bb={level?.bb} />
         </Panel>
       </div>
     </div>
@@ -504,6 +505,8 @@ function BreakScreen({
   });
   const s = tournament.structure;
   const level = view.activeLevel;
+  // лидеры по фишкам — только если стеки посчитаны (обычно как раз на перерыве)
+  const leaders = useBoardRating(tournament.updatedAt)?.chipLeaders ?? null;
 
   return (
     <div className="mt-5 flex flex-1 flex-col gap-5 xl:mt-6 xl:gap-6">
@@ -514,7 +517,7 @@ function BreakScreen({
           src={logo}
           alt="ГОТО ПОКЕР"
           priority
-          className="animate-breathe relative h-[clamp(14rem,38vh,30rem)] w-auto"
+          className={`animate-breathe relative w-auto ${leaders ? "h-[clamp(9rem,24vh,20rem)]" : "h-[clamp(14rem,38vh,30rem)]"}`}
         />
 
         <div className="relative flex flex-col items-center text-center lg:items-start lg:text-left">
@@ -543,6 +546,16 @@ function BreakScreen({
             )}
           </div>
         </div>
+
+        {leaders && (
+          <div className="relative flex w-full max-w-[34rem] flex-col self-stretch lg:w-[30%] lg:self-center">
+            <div className="tv-sm mb-2 flex items-baseline justify-between gap-2">
+              <span className="font-bold tracking-[0.25em] text-amber-300">ЛИДЕРЫ ПО ФИШКАМ</span>
+              <span className="tv-xs text-slate-500">{countedLabel(leaders)}</span>
+            </div>
+            <ChipLeaders leaders={leaders} bb={level?.bb} size="break" />
+          </div>
+        )}
       </Panel>
 
       <div className="grid grid-cols-1 gap-5 md:grid-cols-3 xl:gap-6">

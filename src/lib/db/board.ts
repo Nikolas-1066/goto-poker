@@ -18,6 +18,8 @@ export type BoardRating = {
   all: { rows: BoardRow[] } | null;
   players: { playing: number; total: number; finished: boolean; rows: (BoardRow & { out: boolean })[] } | null;
   preview: { field: number; final: boolean; rows: BoardRow[] } | null;
+  /** Лидеры по фишкам — только по посчитанным стекам (docs/SEATING.md); null — никого не посчитали */
+  chipLeaders: { name: string; stack: number; countedAt: number }[] | null;
 };
 
 const fmtKo = (ko: number) => (ko ? `KO ${String(ko).replace(".", ",")}` : "");
@@ -35,6 +37,7 @@ export function boardRating(db: DatabaseSync, now = Date.now()): BoardRating {
   const people = listParticipants(db, cur.id, status === "finished").filter((p) => p.status !== "registered");
   const playing = people.filter((p) => p.status === "playing");
 
+  const counted = status === "finished" ? [] : playing.filter((p) => p.stack.counted && p.stack.countedAt != null);
   const rules = currentRules(db, now).rules;
   const kind = cur.kind as TournamentKind;
 
@@ -73,6 +76,12 @@ export function boardRating(db: DatabaseSync, now = Date.now()): BoardRating {
             value: String(r.points),
           })),
         }
+      : null,
+    chipLeaders: counted.length
+      ? [...counted]
+          .sort((a, b) => b.stack.value - a.stack.value || a.name.localeCompare(b.name, "ru"))
+          .slice(0, 3)
+          .map((p) => ({ name: p.name, stack: p.stack.value, countedAt: p.stack.countedAt! }))
       : null,
   };
 }

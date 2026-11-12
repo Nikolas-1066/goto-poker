@@ -1,17 +1,19 @@
 "use client";
 
 // Правый блок табло (docs/RATING.md, раздел 7): по очереди — топ месяца, топ за всё время,
-// игроки текущего турнира, «сколько очков даст место сейчас». Время экрана — настройка;
+// игроки текущего турнира, «сколько очков даст место сейчас», лидеры по фишкам (если стеки посчитаны,
+// docs/SEATING.md). Время экрана — настройка;
 // игроки турнира (нокауты) показываются чаще и дольше остальных.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { BoardRating, BoardRow } from "@/lib/db/board";
+import { ChipLeaders, countedLabel } from "./ChipLeaders";
 
 type Row = BoardRow & { out?: boolean };
 type Screen = {
   key: string;
   /** Группа экранов: страницы одного списка идут подряд */
-  group: "players" | "month" | "all" | "preview";
+  group: "players" | "month" | "all" | "preview" | "chips";
   label: string;
   title: string;
   badge?: string;
@@ -23,7 +25,7 @@ type Screen = {
 };
 
 /** Свежие данные рейтинга: раз в 15 секунд и сразу, когда турнир изменился */
-function useBoardRating(updatedAt: number | undefined) {
+export function useBoardRating(updatedAt: number | undefined) {
   const [data, setData] = useState<BoardRating | null>(null);
   useEffect(() => {
     let alive = true;
@@ -45,6 +47,10 @@ function useBoardRating(updatedAt: number | undefined) {
 /**
  * Размер блока не зависит от длины списка: он занимает своё место на экране, а сколько строк
  * в него влезает — измеряем. Длинный список делится на страницы (1/3, 2/3…).
+ * Высоту строки берём у невидимой строки-образца (всегда одной и той же): у рейтингов строка
+ * с номером места выше, чем у списка игроков, и если мерить по первой строке экрана, число строк
+ * на странице прыгало бы от экрана к экрану, страницы пересобирались бы по кругу — табло падало
+ * (ошибка React «Maximum update depth»).
  */
 function usePerPage() {
   const [perPage, setPerPage] = useState(10);
@@ -52,10 +58,10 @@ function usePerPage() {
   const listRef = useCallback((list: HTMLDivElement | null) => {
     if (!list) return;
     const measure = () => {
-      const row = list.firstElementChild as HTMLElement | null;
-      if (!row) return;
+      const probe = list.querySelector<HTMLElement>("[data-probe]");
+      if (!probe || !probe.offsetHeight) return;
       const gap = 4;
-      const fit = Math.max(3, Math.floor((list.clientHeight + gap) / (row.offsetHeight + gap)));
+      const fit = Math.max(3, Math.floor((list.clientHeight + gap) / (probe.offsetHeight + gap)));
       setPerPage((old) => (old === fit ? old : fit));
     };
     measure();
@@ -78,7 +84,7 @@ function paged(base: Omit<Screen, "key" | "rows" | "start">, rows: Row[], perPag
   }));
 }
 
-export function RatingRotator({ updatedAt }: { updatedAt: number | undefined }) {
+export function RatingRotator({ updatedAt, bb }: { updatedAt: number | undefined; /** Большой блайнд — для «76 ББ» у лидеров по фишкам */ bb?: number }) {
   const data = useBoardRating(updatedAt);
   const [step, setStep] = useState(0);
   const { listRef, perPage } = usePerPage();
@@ -104,6 +110,17 @@ export function RatingRotator({ updatedAt }: { updatedAt: number | undefined }) 
           perPage,
         ),
       );
+    if (data.chipLeaders)
+      list.push({
+        key: "chips",
+        group: "chips",
+        label: "♦ ЛИДЕРЫ ПО ФИШКАМ",
+        title: countedLabel(data.chipLeaders),
+        rows: [],
+        start: 1,
+        ranked: false,
+        hint: "Стеки, посчитанные за столами",
+      });
     if (data.preview)
       list.push(
         ...paged(
@@ -181,7 +198,17 @@ export function RatingRotator({ updatedAt }: { updatedAt: number | undefined }) 
         {screen.badge && <div className="tv-xs shrink-0 rounded-full border border-white/10 px-3 py-1 text-slate-400">{screen.badge}</div>}
       </div>
 
-      <div ref={listRef} className="mt-3 flex min-h-0 flex-1 flex-col justify-around gap-1 overflow-hidden">
+      {screen.group === "chips" && data?.chipLeaders ? (
+        <div className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden">
+          <ChipLeaders leaders={data.chipLeaders} bb={bb} />
+        </div>
+      ) : (
+      <div ref={listRef} className="relative mt-3 flex min-h-0 flex-1 flex-col justify-around gap-1 overflow-hidden">
+        {/* строка-образец для подсчёта строк на странице (самая высокая — с номером места), не видна */}
+        <div data-probe aria-hidden className="pointer-events-none invisible absolute inset-x-0 top-0 flex items-center gap-3">
+          <div className="tv-md flex h-[1.7em] w-[1.7em] shrink-0 items-center justify-center rounded-lg font-bold">0</div>
+          <div className="text-[clamp(0.85rem,1.35vw,2rem)] font-medium leading-tight">Образец</div>
+        </div>
         {screen.rows.map((row, index) => {
           const place = screen.start + index;
           return (
@@ -201,6 +228,7 @@ export function RatingRotator({ updatedAt }: { updatedAt: number | undefined }) 
           );
         })}
       </div>
+      )}
 
       <div className="tv-xs mt-3 flex shrink-0 items-center justify-between gap-2 border-t border-white/[0.07] pt-2 tracking-wide text-slate-500">
         <span className="truncate">{screen.hint}</span>

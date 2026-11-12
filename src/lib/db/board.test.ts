@@ -46,7 +46,7 @@ function finished(at: number, rows: [string, number, number][]) {
 
 describe("рейтинг на табло", () => {
   it("пусто — экранов нет", () => {
-    expect(boardRating(db, NOW)).toEqual({ seconds: 25, month: null, all: null, players: null, preview: null });
+    expect(boardRating(db, NOW)).toEqual({ seconds: 25, month: null, all: null, players: null, preview: null, chipLeaders: null });
   });
 
   it("топ месяца и за всё время — только имена и очки, не больше N строк", () => {
@@ -99,5 +99,32 @@ describe("рейтинг на табло", () => {
         { name: "3 место", value: "23" },
       ],
     });
+  });
+
+  it("лидеры по фишкам — только посчитанные стеки игроков в игре, трое", () => {
+    const tid = currentTournament(db).id;
+    db.prepare("UPDATE tournaments SET structure_json = ? WHERE id = ?").run(
+      JSON.stringify({ startingStack: 30000, rebuyStack: 30000, addonStack: 40000, doubleAddonStack: 80000 }),
+      tid,
+    );
+    const ins = db.prepare("INSERT INTO participants (tournament_id, player_id, status, registered_at) VALUES (?, ?, 'registered', ?)");
+    const ev = db.prepare("INSERT INTO events (tournament_id, participant_id, type, at) VALUES (?, ?, ?, ?)");
+    const count = db.prepare("UPDATE participants SET stack_count = ?, stack_count_at = ? WHERE id = ?");
+    const pid: Record<string, number> = {};
+    for (const n of ["Саша", "Ира", "Олег", "Женя"]) {
+      pid[n] = Number(ins.run(tid, ids[n], NOW).lastInsertRowid);
+      ev.run(tid, pid[n], "entry", NOW);
+    }
+    expect(boardRating(db, NOW).chipLeaders).toBeNull(); // никого не посчитали — блока нет
+    count.run(52000, NOW + 10, pid["Саша"]);
+    count.run(91000, NOW + 10, pid["Ира"]);
+    count.run(15000, NOW + 10, pid["Олег"]);
+    count.run(70000, NOW + 10, pid["Женя"]);
+    ev.run(tid, pid["Саша"], "addon", NOW + 20); // аддон после подсчёта прибавляется
+    expect(boardRating(db, NOW).chipLeaders).toEqual([
+      { name: "Саша", stack: 92000, countedAt: NOW + 10 },
+      { name: "Ира", stack: 91000, countedAt: NOW + 10 },
+      { name: "Женя", stack: 70000, countedAt: NOW + 10 },
+    ]);
   });
 });
