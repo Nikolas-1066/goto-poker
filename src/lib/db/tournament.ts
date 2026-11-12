@@ -15,7 +15,7 @@ import {
 } from "../cash";
 import { applyAction, boardView } from "../clock";
 import { phoneTail } from "../players";
-import { MAX_SEATS, MAX_TABLES } from "../seating";
+import { MAX_SEATS, MAX_TABLES, pickSeat, playerStack, type PlayerStack, type Seat } from "../seating";
 import {
   checkAction,
   computeResults,
@@ -39,6 +39,7 @@ import {
 } from "./cash";
 import { finalizeResults } from "./history";
 import { finalistsOf, getPeriod } from "./periods";
+import { getSeating, saveSeating } from "./seating";
 import { audit } from "./sqlite";
 
 export type ParticipantStatus = "registered" | "playing" | "busted";
@@ -77,6 +78,8 @@ export type ParticipantView = {
   cash: PlayerCash;
   /** Долги игрока с прошлых турниров */
   oldDebts: PlayerDebt[];
+  /** Стек в текущем заходе: расчётный или посчитанный (у игроков в игре) */
+  stack: PlayerStack;
 };
 
 export type PlayerAction =
@@ -101,8 +104,16 @@ export type PlayerAction =
     }
   /** Отменить действие; вылет в общей раздаче отменяется целиком */
   | { type: "cancel"; eventId: number }
-  /** Посадить за стол (1–3) и место (1–10); null — убрать. Без автобалансировки */
+  /** Посадить за стол (1–3) и место (1–10); null — убрать */
   | { type: "seat"; participantId: number; tableNo: number | null; seatNo: number | null }
+  /** Пересадить нескольких сразу (подсказки «Пересадите» / «Закройте стол») */
+  | { type: "seatMany"; moves: { participantId: number; tableNo: number; seatNo: number }[] }
+  /** Посадить автоматически (первый стол с местом, случайное свободное место) */
+  | { type: "autoSeat"; participantId: number }
+  /** Настройки рассадки: мест за столом, автопосадка при «Пришёл» и re-entry */
+  | { type: "setSeating"; seatsPerTable?: number; autoSeat?: boolean }
+  /** Вписать посчитанный стек (null — убрать, снова расчётный) */
+  | { type: "setStack"; participantId: number; stack: number | null }
   /**
    * Сделать турнир финалом закрытого периода (или обычным: periodId = null). Только до старта,
    * пока никто не вошёл. Финалисты записываются автоматически; записать можно только их.
@@ -127,7 +138,12 @@ export type PlayerAction =
 const CASH_ACTIONS = new Set<PlayerAction["type"]>(["setFree", "pay", "cancelPayment"]);
 
 /** Что вернуть админке после действия: сообщение для подсказки и что можно отменить */
-export type PlayerActionResult = { message: string; undoEventId: number | null };
+export type PlayerActionResult = {
+  message: string;
+  undoEventId: number | null;
+  /** Куда посадили (автопосадка) — админка показывает крупно */
+  seat?: Seat | null;
+};
 
 /** Ошибка, которую админ может обойти подтверждением («Регистрация закрыта. Всё равно?») */
 export class NeedsForceError extends Error {}
@@ -182,7 +198,8 @@ export function listParticipants(db: DatabaseSync, tournamentId: number, finishe
   const rows = db
     .prepare(
       `SELECT p.id, p.player_id, p.registered_at, p.arrived_at, p.table_no, p.seat_no, p.place AS saved_place,
-              p.place_to AS saved_place_to, p.ko AS saved_ko, p.points, p.elo_before, p.elo_after, pl.name, pl.phone
+              p.place_to AS saved_place_to, p.ko AS saved_ko, p.points, p.elo_before, p.elo_after, pl.name, pl.phone,
+              p.stack_count, p.stack_count_at
        FROM participants p JOIN players pl ON pl.id = p.player_id
        WHERE p.tournament_id = ?`,
     )
@@ -201,8 +218,11 @@ export function listParticipants(db: DatabaseSync, tournamentId: number, finishe
     elo_after: number | null;
     name: string;
     phone: string;
+    stack_count: number | null;
+    stack_count_at: number | null;
   }[];
   const journal = loadJournal(db, tournamentId);
+  const stacks = stacksOf(db, tournamentId);
   const res = computeResults(journal, { finished });
   const names = new Map(rows.map((r) => [r.id, r.name]));
   const cash = cashByPlayer(loadCharges(db, tournamentId), loadPayments(db, tournamentId));
@@ -250,6 +270,16 @@ export function listParticipants(db: DatabaseSync, tournamentId: number, finishe
         payments: [],
       },
       oldDebts: debts.get(r.player_id) ?? [],
+      stack:
+        x?.status === "playing"
+          ? playerStack(
+              stacks,
+              journal
+                .filter((e) => e.participantId === r.id && !e.cancelled && e.type !== "bust")
+                .map((e) => ({ type: e.type as "entry" | "reentry" | "addon" | "double_addon", at: e.at })),
+              r.stack_count != null && r.stack_count_at != null ? { stack: r.stack_count, at: r.stack_count_at } : null,
+            )
+          : { value: 0, counted: false, countedAt: null },
     };
   });
   const rank = { playing: 0, registered: 1, busted: 2 } as const;
@@ -260,6 +290,19 @@ export function listParticipants(db: DatabaseSync, tournamentId: number, finishe
       (a.place ?? 0) - (b.place ?? 0) ||
       a.name.localeCompare(b.name, "ru"),
   );
+}
+
+/** Стеки структуры турнира (старт, ребай, аддон, двойной аддон) — для расчётного стека игрока */
+function stacksOf(db: DatabaseSync, tournamentId: number) {
+  const row = db.prepare("SELECT structure_json FROM tournaments WHERE id = ?").get(tournamentId) as { structure_json: string | null } | undefined;
+  const s = row?.structure_json ? (JSON.parse(row.structure_json) as Partial<Record<string, number>>) : {};
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  return {
+    startingStack: n(s.startingStack),
+    rebuyStack: n(s.rebuyStack),
+    addonStack: n(s.addonStack),
+    doubleAddonStack: n(s.doubleAddonStack ?? n(s.addonStack) * 2),
+  };
 }
 
 /** Что сейчас разрешено по часам турнира */
@@ -330,8 +373,45 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
     );
   /** Долг игрока за этот турнир */
   const debtOf = (playerId: number) => cashByPlayer(loadCharges(db, cur.id), loadPayments(db, cur.id)).get(playerId)?.debt ?? 0;
+  /** Занятые места: у игроков в игре и записавшихся (кроме вылетевших) */
+  const occupied = (exceptIds: number[] = []) => {
+    const res = computeResults(journal());
+    return (
+      db
+        .prepare("SELECT id, table_no, seat_no FROM participants WHERE tournament_id = ? AND table_no IS NOT NULL AND seat_no IS NOT NULL")
+        .all(cur.id) as { id: number; table_no: number; seat_no: number }[]
+    )
+      .filter((x) => !exceptIds.includes(x.id) && res.participants.get(x.id)?.status !== "busted")
+      .map((x) => ({ id: x.id, tableNo: x.table_no, seatNo: x.seat_no }));
+  };
+  const setSeat = (participantId: number, s: Seat | null) =>
+    db.prepare("UPDATE participants SET table_no = ?, seat_no = ? WHERE id = ?").run(s?.tableNo ?? null, s?.seatNo ?? null, participantId);
+  /**
+   * Автопосадка при входе: свой стол оставляем, если он ещё свободен (заранее посадили) и fresh = false;
+   * re-entry (fresh) — новое случайное место. Без автопосадки: занятое другим место освобождаем.
+   */
+  const seatOnEntry = (participantId: number, fresh: boolean): Seat | null | undefined => {
+    const me = db.prepare("SELECT table_no, seat_no FROM participants WHERE id = ?").get(participantId) as {
+      table_no: number | null;
+      seat_no: number | null;
+    };
+    const others = occupied([participantId]);
+    const mineFree = me.table_no != null && me.seat_no != null && !others.some((o) => o.tableNo === me.table_no && o.seatNo === me.seat_no);
+    const settings = getSeating(db);
+    if (!settings.autoSeat) {
+      if (me.table_no != null && !mineFree) setSeat(participantId, null);
+      return undefined;
+    }
+    if (mineFree && !fresh) return { tableNo: me.table_no!, seatNo: me.seat_no! };
+    const s = pickSeat(others, settings.seatsPerTable);
+    setSeat(participantId, s);
+    return s;
+  };
+  const seatText = (s: Seat | null | undefined) =>
+    s === undefined ? "" : s ? ` · стол ${s.tableNo}, место ${s.seatNo}` : " · свободных мест за столами нет";
   let message = "";
   let undoEventId: number | null = null;
+  let seated: Seat | null | undefined;
 
   if (t.status === "finished" && action.type !== "setMode" && !CASH_ACTIONS.has(action.type)) {
     throw new Error("Турнир завершён. Исправить итоги можно в «Истории»");
@@ -400,6 +480,8 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
       }
       db.prepare("UPDATE participants SET arrived_at = COALESCE(arrived_at, ?) WHERE id = ?").run(now, p.id);
       db.prepare("UPDATE players SET first_visit_at = COALESCE(first_visit_at, ?) WHERE id = ?").run(now, p.player_id);
+      seated = seatOnEntry(p.id, false);
+      message += seatText(seated);
       break;
     }
     case "reentry": {
@@ -407,6 +489,8 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
       fail(check({ type: "reentry", participantId: p.id }, { reentryOpen: ctx.reentryOpen }), true);
       undoEventId = addEvent(p.id, "reentry");
       message = `${name(p.id)} — re-entry`;
+      seated = seatOnEntry(p.id, true);
+      message += seatText(seated);
       break;
     }
     case "addon":
@@ -482,6 +566,8 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
           refund += x.amount;
         }
       }
+      // отменили «Пришёл» — место, выданное автопосадкой, освобождается
+      if (e.type === "entry" && getSeating(db).autoSeat) setSeat(e.participant_id, null);
       const what = { entry: "вход", reentry: "re-entry", addon: "аддон", double_addon: "двойной аддон", bust: "вылет" }[e.type];
       message = `Отменено: ${what} — ${name(e.participant_id)}${group.length > 1 ? ` и ещё ${group.length - 1}` : ""}`;
       if (refund > 0) message += ` (и оплата ${formatRub(refund)} — верните деньги)`;
@@ -506,6 +592,60 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
       }
       db.prepare("UPDATE participants SET table_no = ?, seat_no = ? WHERE id = ?").run(table, seat, p.id);
       message = table == null ? `${name(p.id)} — без стола` : `${name(p.id)} — стол ${table}${seat != null ? `, место ${seat}` : ""}`;
+      break;
+    }
+    case "seatMany": {
+      const moves = Array.isArray(action.moves) ? action.moves : [];
+      if (!moves.length) throw new Error("Некого пересаживать");
+      const ids = moves.map((m) => participantOf(db, cur.id, Number(m.participantId)).id);
+      if (new Set(ids).size !== ids.length) throw new Error("Один игрок дважды в пересадке");
+      const targets = moves.map((m) => ({ tableNo: Number(m.tableNo), seatNo: Number(m.seatNo) }));
+      for (const s of targets) {
+        if (!(Number.isInteger(s.tableNo) && s.tableNo >= 1 && s.tableNo <= MAX_TABLES)) throw new Error(`Стол — от 1 до ${MAX_TABLES}`);
+        if (!(Number.isInteger(s.seatNo) && s.seatNo >= 1 && s.seatNo <= MAX_SEATS)) throw new Error(`Место — от 1 до ${MAX_SEATS}`);
+      }
+      // места после пересадки не должны совпадать ни между собой, ни с теми, кто остаётся на месте
+      const key = (s: Seat) => `${s.tableNo}/${s.seatNo}`;
+      const stay = new Map(occupied(ids).map((o) => [key(o), o.id]));
+      const seen = new Set<string>();
+      targets.forEach((s) => {
+        if (stay.has(key(s))) throw new Error(`Стол ${s.tableNo}, место ${s.seatNo} уже занято: ${name(stay.get(key(s))!)}`);
+        if (seen.has(key(s))) throw new Error(`Двое на одно место: стол ${s.tableNo}, место ${s.seatNo}`);
+        seen.add(key(s));
+      });
+      ids.forEach((id, i) => setSeat(id, targets[i]));
+      message =
+        ids.length === 1
+          ? `${name(ids[0])} → стол ${targets[0].tableNo}, место ${targets[0].seatNo}`
+          : `Пересажено: ${ids.length} (${ids.map((id, i) => `${name(id)} → ${targets[i].tableNo}/${targets[i].seatNo}`).join(", ")})`;
+      audit(db, "tournament.seatMany", { tournamentId: cur.id, moves }, now);
+      break;
+    }
+    case "autoSeat": {
+      const p = participantOf(db, cur.id, action.participantId);
+      const s = pickSeat(occupied([p.id]), getSeating(db).seatsPerTable);
+      if (!s) throw new Error("Свободных мест за столами нет — увеличьте «мест за столом» или посадите вручную");
+      setSeat(p.id, s);
+      seated = s;
+      message = `${name(p.id)}${seatText(s)}`;
+      break;
+    }
+    case "setSeating": {
+      const s = saveSeating(db, { seatsPerTable: action.seatsPerTable, autoSeat: action.autoSeat }, now);
+      message = `Столы: мест за столом ${s.seatsPerTable} · автопосадка ${s.autoSeat ? "вкл" : "выкл"}`;
+      break;
+    }
+    case "setStack": {
+      const p = participantOf(db, cur.id, action.participantId);
+      if (action.stack == null) {
+        db.prepare("UPDATE participants SET stack_count = NULL, stack_count_at = NULL WHERE id = ?").run(p.id);
+        message = `${name(p.id)}: стек снова расчётный`;
+        break;
+      }
+      const stack = Number(action.stack);
+      if (!Number.isInteger(stack) || stack < 0 || stack > 1_000_000_000) throw new Error("Стек — целое число фишек");
+      db.prepare("UPDATE participants SET stack_count = ?, stack_count_at = ? WHERE id = ?").run(stack, now, p.id);
+      message = `${name(p.id)}: стек ${stack.toLocaleString("ru-RU")}`;
       break;
     }
     case "finish": {
@@ -589,7 +729,7 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
   }
 
   syncTournament(db, next, now);
-  return { message, undoEventId };
+  return { message, undoEventId, ...(seated !== undefined ? { seat: seated } : {}) };
 }
 
 /** Финал: записать и посадить можно только финалистов периода */

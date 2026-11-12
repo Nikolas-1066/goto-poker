@@ -436,6 +436,96 @@ describe("рассадка", () => {
   });
 });
 
+describe("автопосадка и стек (рассадка столов)", () => {
+  const extra = (n: number) =>
+    Array.from({ length: n }, (_, i) => createPlayer(db, { name: `Гость ${i + 1}`, phone: `+7911000${String(i).padStart(4, "0")}` }).id);
+  const seated = () => people().filter((p) => p.status === "playing" && p.tableNo != null);
+
+  it("«Пришёл» сажает за стол 1 до лимита, потом за стол 2; места не повторяются", () => {
+    player({ type: "setSeating", seatsPerTable: 4 });
+    for (const id of [sasha, ira, oleg, ...extra(3)]) player({ type: "enter", playerId: id });
+    expect(lastResult!.seat).toMatchObject({ tableNo: 2 });
+    expect(lastResult!.message).toMatch(/· стол 2, место [1-4]$/);
+    const list = seated();
+    expect(list.filter((p) => p.tableNo === 1)).toHaveLength(4);
+    expect(list.filter((p) => p.tableNo === 2)).toHaveLength(2);
+    expect(new Set(list.map((p) => `${p.tableNo}/${p.seatNo}`)).size).toBe(6);
+    expect(list.every((p) => p.seatNo! >= 1 && p.seatNo! <= 4)).toBe(true);
+  });
+
+  it("заранее посаженный остаётся на своём месте; без автопосадки — никого не сажают", () => {
+    player({ type: "register", playerId: oleg });
+    player({ type: "seat", participantId: byName("Олег").id, tableNo: 3, seatNo: 7 });
+    player({ type: "enter", participantId: byName("Олег").id });
+    expect(byName("Олег")).toMatchObject({ tableNo: 3, seatNo: 7 });
+    player({ type: "setSeating", autoSeat: false });
+    player({ type: "enter", playerId: sasha });
+    expect(byName("Саша").tableNo).toBeNull();
+    expect(lastResult!.seat).toBeUndefined();
+    player({ type: "autoSeat", participantId: byName("Саша").id });
+    expect(byName("Саша").tableNo).toBe(1);
+  });
+
+  it("re-entry — новое место; отмена «Пришёл» освобождает место", () => {
+    player({ type: "enter", playerId: sasha });
+    player({ type: "enter", playerId: ira });
+    bust(byName("Ира").id, T0 + 1000, byName("Саша").id);
+    player({ type: "reentry", participantId: byName("Ира").id }, T0 + 2000);
+    expect(byName("Ира").tableNo).toBe(1);
+    expect(byName("Ира").seatNo).not.toBe(byName("Саша").seatNo);
+    player({ type: "enter", playerId: oleg }, T0 + 3000);
+    player({ type: "cancel", eventId: lastResult!.undoEventId! }, T0 + 4000);
+    expect(byName("Олег")).toMatchObject({ status: "registered", tableNo: null, seatNo: null });
+  });
+
+  it("все места заняты — игрок в игре без места и понятное сообщение", () => {
+    player({ type: "setSeating", seatsPerTable: 2 });
+    for (const id of [sasha, ira, oleg, ...extra(4)]) player({ type: "enter", playerId: id });
+    expect(lastResult!.seat).toBeNull();
+    expect(lastResult!.message).toContain("свободных мест за столами нет");
+    expect(() => player({ type: "autoSeat", participantId: people().find((p) => p.tableNo == null)!.id })).toThrow("Свободных мест");
+  });
+
+  it("пересадить нескольких сразу; занятое место — ошибка, ничего не меняется", () => {
+    player({ type: "setSeating", autoSeat: false });
+    for (const id of [sasha, ira, oleg]) player({ type: "enter", playerId: id });
+    const seat = (n: string, t: number, sNo: number) => player({ type: "seat", participantId: byName(n).id, tableNo: t, seatNo: sNo });
+    seat("Саша", 1, 1);
+    seat("Ира", 1, 2);
+    seat("Олег", 2, 1);
+    // поменять Сашу и Иру местами — можно, их места освобождаются в той же пересадке
+    player({
+      type: "seatMany",
+      moves: [
+        { participantId: byName("Саша").id, tableNo: 1, seatNo: 2 },
+        { participantId: byName("Ира").id, tableNo: 1, seatNo: 1 },
+      ],
+    });
+    expect([byName("Саша").seatNo, byName("Ира").seatNo]).toEqual([2, 1]);
+    expect(() =>
+      player({ type: "seatMany", moves: [{ participantId: byName("Саша").id, tableNo: 2, seatNo: 1 }] }),
+    ).toThrow("уже занято: Олег");
+    expect(byName("Саша")).toMatchObject({ tableNo: 1, seatNo: 2 });
+  });
+
+  it("стек: расчётный, вписанный, снова расчётный", () => {
+    player({ type: "enter", playerId: sasha });
+    const start = state.presets[0].startingStack;
+    expect(byName("Саша").stack).toEqual({ value: start, counted: false, countedAt: null });
+    player({ type: "setStack", participantId: byName("Саша").id, stack: 52500 }, T0 + 5000);
+    expect(byName("Саша").stack).toEqual({ value: 52500, counted: true, countedAt: T0 + 5000 });
+    expect(() => player({ type: "setStack", participantId: byName("Саша").id, stack: -1 })).toThrow("целое число");
+    player({ type: "setStack", participantId: byName("Саша").id, stack: null });
+    expect(byName("Саша").stack.counted).toBe(false);
+  });
+
+  it("настройки: от 2 до 10 мест", () => {
+    expect(() => player({ type: "setSeating", seatsPerTable: 1 })).toThrow("от 2 до 10");
+    player({ type: "setSeating", seatsPerTable: 9 });
+    expect(lastResult!.message).toBe("Столы: мест за столом 9 · автопосадка вкл");
+  });
+});
+
 describe("касса (docs/CASH.md)", () => {
   const PRICES = { entry: 1500, reentry: 1000, addon: 1000, doubleAddon: 2000 };
   const cash = (who: string) => byName(who).cash;
@@ -498,7 +588,7 @@ describe("касса (docs/CASH.md)", () => {
 
   it("«Пришёл + оплатил» — вход и оплата одним нажатием", () => {
     player({ type: "enter", playerId: ira, pay: "transfer" });
-    expect(lastResult!.message).toBe("Ира в игре, оплачено 1 500 ₽");
+    expect(lastResult!.message).toMatch(/^Ира в игре, оплачено 1 500 ₽ · стол 1, место \d+$/);
     expect(cash("Ира")).toMatchObject({ paid: 1500, debt: 0, byMethod: { transfer: 1500 } });
   });
 

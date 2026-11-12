@@ -228,4 +228,10 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX expenses_tournament ON expenses (tournament_id);
   `,
+  // 6 — рассадка: посчитанный стек игрока (вписывает админ или дилер) и когда его посчитали.
+  // Без подсчёта стек на схеме стола — расчётный (вход/re-entry + аддоны).
+  `
+  ALTER TABLE participants ADD COLUMN stack_count INTEGER;
+  ALTER TABLE participants ADD COLUMN stack_count_at INTEGER;
+  `,
 ];
