@@ -715,11 +715,32 @@ function BustPanel({
   const [burned, setBurned] = useState("");
 
   const byId = new Map(playing.map((p) => [p.id, p]));
-  // сначала — игроки с того же стола, что и вылетевший
-  const table = first.tableNo;
-  const candidates = playing
-    .filter((p) => !busted.includes(p.id))
-    .sort((a, b) => Number(table != null && b.tableNo === table) - Number(table != null && a.tableNo === table));
+  const candidates = playing.filter((p) => !busted.includes(p.id));
+  // выбор по столам: сразу открыт стол вылетевшего (null — «Все»)
+  const [table, setTable] = useState<number | null>(first.tableNo);
+  const tables = [...new Set(candidates.map((p) => p.tableNo).filter((t): t is number => t != null))].sort((a, b) => a - b);
+  const shown = (table == null || !tables.includes(table) ? candidates : candidates.filter((p) => p.tableNo === table))
+    .slice()
+    .sort((a, b) => (a.tableNo ?? 99) - (b.tableNo ?? 99) || (a.seatNo ?? 99) - (b.seatNo ?? 99));
+  const tableTabs = tables.length > 0 && (
+    <div className="flex flex-wrap gap-1.5">
+      {tables.map((t) => (
+        <Button key={t} variant={table === t ? "primary" : "default"} className="px-3 py-1.5 text-sm" onClick={() => setTable(t)}>
+          Стол {t}
+          <span className="ml-1 opacity-60">· {candidates.filter((p) => p.tableNo === t).length}</span>
+        </Button>
+      ))}
+      <Button
+        variant={table == null || !tables.includes(table) ? "primary" : "default"}
+        className="px-3 py-1.5 text-sm"
+        onClick={() => setTable(null)}
+      >
+        Все
+      </Button>
+    </div>
+  );
+  const seatLabel = (p: ParticipantView) =>
+    p.tableNo == null ? "" : table != null && tables.includes(table) ? (p.seatNo != null ? `м. ${p.seatNo}` : "") : formatSeat(p.tableNo, p.seatNo);
   const left = playing.length;
   const from = left - busted.length + 1;
   const placeText = busted.length === 1 ? `${left} место` : `места ${from}–${left}`;
@@ -816,8 +837,9 @@ function BustPanel({
       ) : addingBusted ? (
         <div>
           <div className="mb-1 text-sm font-semibold">Кто ещё вылетел в этой раздаче?</div>
+          {tableTabs}
           <div className="divide-y divide-white/[0.06]">
-            {candidates.map((p) => (
+            {shown.map((p) => (
               <button
                 key={p.id}
                 type="button"
@@ -828,6 +850,7 @@ function BustPanel({
                 }}
               >
                 {p.name}
+                {seatLabel(p) && <span className="ml-2 text-xs font-normal text-slate-500">{seatLabel(p)}</span>}
               </button>
             ))}
           </div>
@@ -838,8 +861,9 @@ function BustPanel({
       ) : (
         <>
           <div className="text-sm font-semibold">{split ? "Кто делил банк? Выберите двоих" : "Кто выбил?"}</div>
+          {tableTabs}
           <div className="grid grid-cols-2 gap-2">
-            {candidates.map((p) => {
+            {shown.map((p) => {
               const on = picked.includes(p.id);
               return (
                 <Button
@@ -853,7 +877,7 @@ function BustPanel({
                   }}
                 >
                   <span className="truncate">{p.name}</span>
-                  {p.tableNo != null && <span className="ml-auto shrink-0 text-xs opacity-60">ст. {p.tableNo}</span>}
+                  {seatLabel(p) && <span className="ml-auto shrink-0 pl-1 text-xs opacity-60">{seatLabel(p)}</span>}
                 </Button>
               );
             })}
