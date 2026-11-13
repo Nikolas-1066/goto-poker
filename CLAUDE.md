@@ -70,6 +70,9 @@ Telegram Mini App для игроков. Архитектуру делать т�
   настройки клуба `src/lib/db/seating.ts` (settings «seating»), посчитанный стек — `participants.stack_count(_at)`
   (миграция 6); действия `autoSeat` / `seatMany` / `setSeating` / `setStack`, автопосадка при «Пришёл» и re-entry
   в `tournament.ts`. UI — `src/components/admin/Tables.tsx` (вид «Столы» в карточке «Игроки»).
+- Расписание будущих турниров (`docs/SITE.md`, шаг 2 Этапа 3): `/admin/schedule` — «постоянные дни» (ставятся на 2 недели
+  вперёд) и отдельные турниры, отмена/возврат, «Открыть турнир» (становится текущим). Чистые функции `src/lib/schedule.ts`
+  (дата/время — по часам клуба, `CLUB_TZ`), база `src/lib/db/schedule.ts` (миграция 7), API `/api/schedule`.
 - Отчёт владельцу после турнира: `src/lib/report.ts` (сдвиг мест, текст), `src/lib/db/report.ts`, `/api/report`;
   UI `src/components/admin/Report.tsx` (текст + «Скопировать» работает и по http, напоминание до копирования)
   и `ReportImages.tsx` (3 картинки на canvas без кассы). В карточке «Игроки» после завершения и в «Истории».

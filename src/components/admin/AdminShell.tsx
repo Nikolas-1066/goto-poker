@@ -10,6 +10,7 @@ import { Button, inputClass } from "./ui";
 // short — подпись на узком экране телефона, чтобы всё меню помещалось в одну строку
 const NAV = [
   { href: "/admin", label: "Управление", short: "Турнир" },
+  { href: "/admin/schedule", label: "Расписание", short: "Распис." },
   { href: "/admin/presets", label: "Структуры", short: "Пресеты" },
   { href: "/admin/players", label: "Игроки", short: "Игроки" },
   { href: "/admin/history", label: "История", short: "История" },

@@ -234,4 +234,37 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE participants ADD COLUMN stack_count INTEGER;
   ALTER TABLE participants ADD COLUMN stack_count_at INTEGER;
   `,
+  // 7 — расписание будущих турниров (docs/SITE.md): «постоянные дни» (каждую неделю) и сами турниры.
+  // Дата и время — как на часах в клубе ('2026-11-20', '19:00'), без привязки к часовому поясу сервера.
+  // edited = 1 — строку, поставленную по постоянному дню, поправили вручную: правка постоянного дня её не трогает.
+  `
+  CREATE TABLE schedule_templates (
+    id          INTEGER PRIMARY KEY,
+    weekday     INTEGER NOT NULL CHECK (weekday BETWEEN 1 AND 7),  -- 1 — понедельник
+    time        TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    preset_id   TEXT NOT NULL,
+    seat_limit  INTEGER,
+    note        TEXT NOT NULL DEFAULT '',
+    created_at  INTEGER NOT NULL,
+    updated_at  INTEGER NOT NULL
+  );
+  CREATE TABLE schedule (
+    id            INTEGER PRIMARY KEY,
+    date          TEXT NOT NULL,
+    time          TEXT NOT NULL,
+    name          TEXT NOT NULL,
+    preset_id     TEXT NOT NULL,
+    seat_limit    INTEGER,
+    note          TEXT NOT NULL DEFAULT '',
+    status        TEXT NOT NULL DEFAULT 'planned' CHECK (status IN ('planned', 'cancelled', 'started')),
+    template_id   INTEGER REFERENCES schedule_templates (id) ON DELETE SET NULL,
+    edited        INTEGER NOT NULL DEFAULT 0,
+    tournament_id INTEGER REFERENCES tournaments (id),
+    created_at    INTEGER NOT NULL,
+    updated_at    INTEGER NOT NULL
+  );
+  CREATE UNIQUE INDEX schedule_template_date ON schedule (template_id, date) WHERE template_id IS NOT NULL;
+  CREATE INDEX schedule_date ON schedule (date, time);
+  `,
 ];
