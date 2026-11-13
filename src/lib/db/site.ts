@@ -12,6 +12,7 @@ import {
   sanitizeAbout,
   type SiteAbout,
   type SiteArchive,
+  type SiteFacts,
   type SitePeriod,
   type SitePlayer,
   type SiteRating,
@@ -81,6 +82,18 @@ export function siteArchive(db: DatabaseSync, periodId: number): SiteArchive | n
       wildcard: f.source === "wildcard",
     })),
   };
+}
+
+/** Сколько игроков уже играло в клубе, сколько турниров сыграно, сколько человек выходит в финал месяца */
+export function siteFacts(db: DatabaseSync): SiteFacts {
+  const n = db
+    .prepare(
+      `SELECT (SELECT COUNT(DISTINCT p.player_id) FROM participants p WHERE p.place IS NOT NULL) AS players,
+              (SELECT COUNT(*) FROM tournaments t WHERE t.status = 'finished' AND t.mode = 'players'
+                 AND EXISTS (SELECT 1 FROM participants p WHERE p.tournament_id = t.id AND p.place IS NOT NULL)) AS tournaments`,
+    )
+    .get() as { players: number; tournaments: number };
+  return { players: n.players, tournaments: n.tournaments, finalistsN: openPeriod(db, "month")?.finalistsN ?? null };
 }
 
 // ---------- Итоги турниров: топ-3 и сколько было игроков ----------

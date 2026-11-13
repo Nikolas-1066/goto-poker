@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { closePeriod, openPeriod, startPeriod } from "./periods";
 import { createPlayer } from "./players";
 import { addItem, setCancelled } from "./schedule";
-import { getAbout, saveAbout, siteArchive, sitePlayer, siteRating, siteResults, siteSchedule } from "./site";
+import { getAbout, saveAbout, siteArchive, siteFacts, sitePlayer, siteRating, siteResults, siteSchedule } from "./site";
 import { openStore } from "./sqlite";
 
 const DAY = 86_400_000;
@@ -102,6 +102,7 @@ describe("итоги турниров", () => {
     finished("Первый", NOV1, [["Саша", 1, 60, 1], ["Ира", 2, 45, 0], ["Олег", 3, 36, 0], ["Женя", 4, 0, 0]]);
     finished("Финал", NOV1 + DAY, [["Ира", 1, 90, 2], ["Саша", 2, 60, 0]], "month_final");
     db.prepare("INSERT INTO tournaments (name, mode, status, created_at, updated_at) VALUES ('Идёт', 'players', 'running', ?, ?)").run(NOW, NOW);
+    expect(siteFacts(db)).toEqual({ players: 4, tournaments: 2, finalistsN: null });
     const res = siteResults(db);
     expect(res.map((t) => [t.name, t.kindLabel, t.players, t.top.length])).toEqual([
       ["Финал", "Финал месяца", 2, 2],

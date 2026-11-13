@@ -61,6 +61,9 @@ export type SiteScheduleItem = {
   structure: { name: string; startingStack: number; entryPrice: number } | null;
 };
 
+/** Цифры клуба для главной — считаются по базе, ничего не придумано */
+export type SiteFacts = { players: number; tournaments: number; finalistsN: number | null };
+
 // ---------- «О клубе» ----------
 
 export type SiteAbout = {

@@ -1,10 +1,10 @@
 import { connection, type NextRequest } from "next/server";
 import { badRequest, isAdmin, unauthorized } from "@/lib/auth";
-import { getAbout, saveAbout, siteArchive, sitePlayer, siteRating, siteResults, siteSchedule } from "@/lib/db/site";
+import { getAbout, saveAbout, siteArchive, siteFacts, sitePlayer, siteRating, siteResults, siteSchedule } from "@/lib/db/site";
 import { withDatabase } from "@/lib/store";
 
 // Данные для сайта клуба (docs/SITE.md) — без пароля: только имена, места, очки, нокауты и ELO.
-// GET /api/site?get=rating | archive&id= | results | player&id= | schedule | about
+// GET /api/site?get=rating | archive&id= | results | player&id= | schedule | facts | about
 
 const json = (data: unknown, status = 200) => Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
 
@@ -28,6 +28,8 @@ export async function GET(req: NextRequest) {
       }
       case "schedule":
         return json(await withDatabase((db) => siteSchedule(db)));
+      case "facts":
+        return json(await withDatabase((db) => siteFacts(db)));
       case "about":
         return json(await withDatabase((db) => getAbout(db)));
       default:

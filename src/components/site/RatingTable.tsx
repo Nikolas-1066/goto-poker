@@ -51,3 +51,39 @@ export function RatingTable({ rows, zone, limit, empty }: { rows: SiteStanding[]
     </div>
   );
 }
+
+/** Пьедестал: первые трое крупно — победитель по центру и выше остальных */
+export function Podium({ rows }: { rows: SiteStanding[] }) {
+  if (rows.length < 3) return null;
+  const style = [
+    { order: "order-2", lift: "sm:-mt-6", ring: "border-amber-300/70 shadow-[0_0_50px_-18px_rgba(252,211,77,0.8)]", tone: "text-amber-300", badge: "from-amber-200 to-amber-400" },
+    { order: "order-1", lift: "", ring: "border-slate-300/40", tone: "text-slate-200", badge: "from-slate-100 to-slate-400" },
+    { order: "order-3", lift: "", ring: "border-orange-400/40", tone: "text-orange-300", badge: "from-orange-200 to-orange-500" },
+  ];
+  return (
+    <div className="mb-5 grid grid-cols-3 items-end gap-2 pt-6 sm:gap-4">
+      {rows.slice(0, 3).map((r, i) => {
+        const s = style[i];
+        return (
+          <div key={r.playerId} className={`${s.order} ${s.lift} rounded-2xl border bg-[#0f1822]/90 px-2 py-4 text-center sm:px-4 sm:py-6 ${s.ring}`}>
+            <div className={`mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-b text-sm font-black text-[#080e15] sm:h-11 sm:w-11 sm:text-base ${s.badge}`}>
+              {r.rank}
+            </div>
+            <div
+              className={`mx-auto mt-3 flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05] font-black uppercase ${s.tone} ${
+                i === 0 ? "h-14 w-14 text-2xl sm:h-20 sm:w-20 sm:text-4xl" : "h-12 w-12 text-xl sm:h-16 sm:w-16 sm:text-3xl"
+              }`}
+            >
+              {r.name.trim().charAt(0)}
+            </div>
+            <div className="mt-2 truncate text-sm font-bold sm:text-lg">
+              <PlayerLink id={r.playerId} name={r.name} />
+            </div>
+            <div className={`mt-2 border-t border-white/[0.07] pt-2 text-xl font-black tabular-nums sm:text-3xl ${s.tone}`}>{r.points.toLocaleString("ru-RU")}</div>
+            <div className="text-[10px] uppercase tracking-[0.15em] text-slate-500 sm:text-xs">очков</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
