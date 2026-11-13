@@ -38,6 +38,32 @@ export type SiteResult = {
   top: { playerId: number; name: string; place: string; points: number | null; ko: number }[];
 };
 
+/** Все места сыгранного турнира — открывается по нажатию на турнир */
+export type SiteResultFull = Omit<SiteResult, "top"> & {
+  rows: { playerId: number; name: string; place: string; points: number | null; ko: number }[];
+};
+
+/** Турнир, который идёт прямо сейчас, — то же, что видно на табло в клубе */
+export type SiteLive = {
+  name: string;
+  kindLabel: string;
+  paused: boolean;
+  onBreak: boolean;
+  /** Номер уровня (на перерыве — следующего) и его блайнды */
+  level: number;
+  blinds: { sb: number; bb: number; ante: number } | null;
+  avgStack: number | null;
+  /** Сколько человек в игре и сколько всего пришло */
+  playing: number;
+  total: number;
+  /** Кто в игре: сначала у кого больше нокаутов */
+  players: { playerId: number; name: string; ko: number }[];
+  /** Кто вылетел: по местам */
+  out: { playerId: number; name: string; place: string; ko: number }[];
+  /** Лидеры по фишкам — только по стекам, которые посчитали в клубе */
+  chipLeaders: { playerId: number; name: string; stack: number }[];
+};
+
 export type SitePlayer = {
   id: number;
   name: string;

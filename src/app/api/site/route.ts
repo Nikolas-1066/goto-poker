@@ -1,10 +1,10 @@
 import { connection, type NextRequest } from "next/server";
 import { badRequest, isAdmin, unauthorized } from "@/lib/auth";
-import { getAbout, saveAbout, siteArchive, siteFacts, sitePlayer, siteRating, siteResults, siteSchedule } from "@/lib/db/site";
+import { getAbout, saveAbout, siteArchive, siteFacts, siteLive, sitePlayer, siteRating, siteResultFull, siteResults, siteSchedule } from "@/lib/db/site";
 import { withDatabase } from "@/lib/store";
 
 // Данные для сайта клуба (docs/SITE.md) — без пароля: только имена, места, очки, нокауты и ELO.
-// GET /api/site?get=rating | archive&id= | results | player&id= | schedule | facts | about
+// GET /api/site?get=rating | archive&id= | results&limit= | result&id= | live | player&id= | schedule | facts | about
 
 const json = (data: unknown, status = 200) => Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
 
@@ -21,7 +21,18 @@ export async function GET(req: NextRequest) {
         return period ? json(period) : json({ error: "Такого периода в архиве нет" }, 404);
       }
       case "results":
-        return json({ results: await withDatabase((db) => siteResults(db)) });
+        return json(
+          await withDatabase((db) => {
+            const limit = Math.min(200, Math.max(1, Math.trunc(Number(q.get("limit"))) || 10));
+            return { results: siteResults(db, limit), total: siteFacts(db).tournaments };
+          }),
+        );
+      case "result": {
+        const result = Number.isInteger(id) ? await withDatabase((db) => siteResultFull(db, id)) : null;
+        return result ? json(result) : json({ error: "Турнир не найден" }, 404);
+      }
+      case "live":
+        return json({ live: await withDatabase((db) => siteLive(db)) });
       case "player": {
         const player = Number.isInteger(id) ? await withDatabase((db) => sitePlayer(db, id)) : null;
         return player ? json(player) : json({ error: "Игрок не найден" }, 404);

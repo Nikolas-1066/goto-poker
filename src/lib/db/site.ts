@@ -3,6 +3,7 @@
 // Каждое поле перечислено явно: новое поле в карточке игрока само на сайт не попадёт.
 
 import type { DatabaseSync } from "node:sqlite";
+import { boardView } from "../clock";
 import { KIND_LABEL, type TournamentKind } from "../rating/points";
 import type { Standing } from "../rating/standings";
 import { formatPlace } from "../results";
@@ -13,10 +14,12 @@ import {
   type SiteAbout,
   type SiteArchive,
   type SiteFacts,
+  type SiteLive,
   type SitePeriod,
   type SitePlayer,
   type SiteRating,
   type SiteResult,
+  type SiteResultFull,
   type SiteScheduleItem,
   type SiteStanding,
 } from "../site";
@@ -24,7 +27,8 @@ import { finalistsOf, getPeriod, listPeriods, openPeriod, PERIOD_LABEL, standing
 import { playerCard } from "./playercard";
 import { ensureSchedule, listSchedule } from "./schedule";
 import { getSettings, type PeriodKind } from "./settings";
-import { audit } from "./sqlite";
+import { audit, loadState } from "./sqlite";
+import { currentTournament, listParticipants } from "./tournament";
 
 const row = (s: Standing): SiteStanding => ({
   rank: s.rank,
@@ -129,6 +133,70 @@ export function siteResults(db: DatabaseSync, limit = 40): SiteResult[] {
       ko: r.ko,
     })),
   }));
+}
+
+/** Все места одного сыгранного турнира. null — такого нет или он ещё не завершён */
+export function siteResultFull(db: DatabaseSync, tournamentId: number): SiteResultFull | null {
+  const t = db
+    .prepare(
+      `SELECT t.id, t.name, t.kind, COALESCE(t.started_at, t.created_at) AS at,
+              (SELECT COUNT(*) FROM participants p WHERE p.tournament_id = t.id AND p.status NOT IN ('registered', 'no_show')) AS players
+       FROM tournaments t WHERE t.id = ? AND t.status = 'finished' AND t.mode = 'players'`,
+    )
+    .get(tournamentId) as { id: number; name: string; kind: string; at: number; players: number } | undefined;
+  if (!t) return null;
+  const rows = db
+    .prepare(
+      `SELECT p.player_id, pl.name, p.place, p.place_to, p.points, p.ko
+       FROM participants p JOIN players pl ON pl.id = p.player_id
+       WHERE p.tournament_id = ? AND p.place IS NOT NULL
+       ORDER BY p.place, pl.name`,
+    )
+    .all(tournamentId) as { player_id: number; name: string; place: number; place_to: number | null; points: number | null; ko: number }[];
+  if (!rows.length) return null;
+  return {
+    id: t.id,
+    name: t.name,
+    kindLabel: kindLabel(t.kind),
+    at: t.at,
+    players: t.players,
+    rows: rows.map((r) => ({ playerId: r.player_id, name: r.name, place: formatPlace({ place: r.place, placeTo: r.place_to }), points: r.points, ko: r.ko })),
+  };
+}
+
+// ---------- Турнир, который идёт сейчас ----------
+
+/** Идущий турнир «По игрокам»: уровень, блайнды, кто в игре, нокауты, лидеры по фишкам, вылетевшие. null — сейчас не играют */
+export function siteLive(db: DatabaseSync, now = Date.now()): SiteLive | null {
+  const t = loadState(db).tournament;
+  if (t.mode !== "players" || (t.status !== "running" && t.status !== "paused")) return null;
+  const cur = currentTournament(db);
+  const people = listParticipants(db, cur.id).filter((p) => p.status === "playing" || p.status === "busted");
+  if (!people.length) return null;
+  const playing = people.filter((p) => p.status === "playing");
+  const view = boardView(t, now);
+  const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, "ru");
+  return {
+    name: t.name,
+    kindLabel: kindLabel(cur.kind),
+    paused: t.status === "paused",
+    onBreak: view.step?.kind === "break",
+    level: view.levelNumber,
+    blinds: view.activeLevel ? { sb: view.activeLevel.sb, bb: view.activeLevel.bb, ante: view.activeLevel.ante } : null,
+    avgStack: view.avgStack,
+    playing: playing.length,
+    total: people.length,
+    players: [...playing].sort((a, b) => b.ko - a.ko || byName(a, b)).map((p) => ({ playerId: p.playerId, name: p.name, ko: p.ko })),
+    out: people
+      .filter((p) => p.status === "busted")
+      .sort((a, b) => (a.place ?? 999) - (b.place ?? 999) || byName(a, b))
+      .map((p) => ({ playerId: p.playerId, name: p.name, place: p.place != null ? formatPlace(p) : "", ko: p.ko })),
+    chipLeaders: playing
+      .filter((p) => p.stack.counted && p.stack.countedAt != null)
+      .sort((a, b) => b.stack.value - a.stack.value || byName(a, b))
+      .slice(0, 5)
+      .map((p) => ({ playerId: p.playerId, name: p.name, stack: p.stack.value })),
+  };
 }
 
 // ---------- Страница игрока ----------

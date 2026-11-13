@@ -73,7 +73,7 @@ Telegram Mini App для игроков. Архитектуру делать т�
 - Расписание будущих турниров (`docs/SITE.md`, шаг 1 Этапа 3): `/admin/schedule` — «постоянные дни» (ставятся на 2 недели
   вперёд) и отдельные турниры, отмена/возврат, «Открыть турнир» (становится текущим). Чистые функции `src/lib/schedule.ts`
   (дата/время — по часам клуба, `CLUB_TZ`), база `src/lib/db/schedule.ts` (миграция 7), API `/api/schedule`.
-- Сайт клуба (`docs/SITE.md`, шаг 2 Этапа 3): `/`, `/schedule`, `/rating`, `/results`, `/players/[id]`, `/about` — без пароля.
+- Сайт клуба (`docs/SITE.md`, шаг 2 Этапа 3): `/`, `/schedule` (ближайшие + блок «идёт сейчас» `LivePanel.tsx` + прошедшие с итогами), `/rating`, `/players/[id]`, `/about` — без пароля.
   Компоненты `src/components/site/`, данные `/api/site?get=…` из `src/lib/db/site.ts` (**только имена, места, очки, KO, ELO** —
   поля перечислены явно, тест следит, что телефоны/заметки/деньги не утекают), «О клубе» — `src/lib/site.ts` + `AboutEditor.tsx`.
 - Отчёт владельцу после турнира: `src/lib/report.ts` (сдвиг мест, текст), `src/lib/db/report.ts`, `/api/report`;

@@ -6,8 +6,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { closePeriod, openPeriod, startPeriod } from "./periods";
 import { createPlayer } from "./players";
 import { addItem, setCancelled } from "./schedule";
-import { getAbout, saveAbout, siteArchive, siteFacts, sitePlayer, siteRating, siteResults, siteSchedule } from "./site";
-import { openStore } from "./sqlite";
+import { applyAction } from "../clock";
+import { getAbout, saveAbout, siteArchive, siteFacts, siteLive, sitePlayer, siteRating, siteResultFull, siteResults, siteSchedule } from "./site";
+import { loadState, openStore, transaction, writeState } from "./sqlite";
+import { applyPlayerAction, currentTournament, listParticipants, type PlayerAction } from "./tournament";
 
 const DAY = 86_400_000;
 const NOV1 = Date.UTC(2026, 10, 1, 9, 0);
@@ -114,6 +116,67 @@ describe("итоги турниров", () => {
       { playerId: ids["Олег"], name: "Олег", place: "3", points: 36, ko: 0 },
     ]);
     expectNoSecrets(res);
+  });
+});
+
+describe("все места турнира", () => {
+  it("по нажатию — вся таблица; незавершённого и чужого турнира нет", () => {
+    const tid = finished("Первый", NOV1, [["Саша", 1, 60, 1], ["Ира", 2, 45, 0], ["Олег", 3, 36, 0], ["Женя", 4, 0, 0]]);
+    const full = siteResultFull(db, tid)!;
+    expect(full).toMatchObject({ id: tid, name: "Первый", players: 4 });
+    expect(full.rows.map((r) => [r.place, r.name, r.points])).toEqual([["1", "Саша", 60], ["2", "Ира", 45], ["3", "Олег", 36], ["4", "Женя", 0]]);
+    expectNoSecrets(full);
+    expect(siteResultFull(db, currentTournament(db).id)).toBeNull();
+    expect(siteResultFull(db, 999)).toBeNull();
+  });
+});
+
+describe("турнир идёт сейчас", () => {
+  const T0 = NOW;
+  const edit = (fn: (state: ReturnType<typeof loadState>) => void, hook?: (state: ReturnType<typeof loadState>) => void) => {
+    const before = loadState(db);
+    const next = structuredClone(before);
+    fn(next);
+    transaction(db, () => {
+      hook?.(next);
+      writeState(db, before, next);
+    });
+  };
+  const act = (action: PlayerAction, now = T0) => edit(() => {}, (next) => void applyPlayerAction(db, next, action, now));
+  const pid = (name: string) => listParticipants(db, currentTournament(db).id).find((p) => p.name === name)!.id;
+
+  it("пока не начали или турнир «Вручную» — ничего; идёт — уровень, блайнды, игроки, нокауты, фишки, вылетевшие", () => {
+    edit((d) => {
+      d.tournament = { ...applyAction(d.tournament, { type: "loadPreset", presetId: d.presets[0].id }, T0, (id) => d.presets.find((p) => p.id === id)), mode: "players" };
+    });
+    act({ type: "setSeating", autoSeat: false });
+    for (const name of ["Саша", "Ира", "Олег"]) act({ type: "enter", playerId: ids[name] });
+    act({ type: "register", playerId: ids["Женя"] }); // записан, но не пришёл — на сайте не виден
+    expect(siteLive(db, T0)).toBeNull();
+
+    edit((d) => {
+      d.tournament = applyAction(d.tournament, { type: "start" }, T0, () => undefined);
+    });
+    act({ type: "bust", busted: [{ participantId: pid("Олег"), handOrder: 1 }], knockers: [pid("Ира")] }, T0 + 1000);
+    act({ type: "setStack", participantId: pid("Ира"), stack: 41_000 }, T0 + 2000);
+
+    const live = siteLive(db, T0 + 3000)!;
+    const first = loadState(db).tournament.structure!.steps.find((s) => s.kind === "level")!;
+    expect(live).toMatchObject({ paused: false, onBreak: false, level: 1, playing: 2, total: 3, kindLabel: "" });
+    expect(live.blinds).toEqual({ sb: first.sb, bb: first.bb, ante: first.ante });
+    expect(live.players).toEqual([
+      { playerId: ids["Ира"], name: "Ира", ko: 1 },
+      { playerId: ids["Саша"], name: "Саша", ko: 0 },
+    ]);
+    expect(live.out).toEqual([{ playerId: ids["Олег"], name: "Олег", place: "3", ko: 0 }]);
+    expect(live.chipLeaders).toEqual([{ playerId: ids["Ира"], name: "Ира", stack: 41_000 }]);
+    expect(live.avgStack).toBeGreaterThan(0);
+    expectNoSecrets(live);
+
+    edit((d) => {
+      d.tournament.mode = "manual";
+    });
+    expect(siteLive(db, T0 + 3000)).toBeNull();
   });
 });
 

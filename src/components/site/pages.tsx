@@ -1,6 +1,6 @@
 "use client";
 
-// Страницы сайта клуба (docs/SITE.md, шаг 2): главная, расписание, рейтинг, итоги, игрок, о клубе.
+// Страницы сайта клуба (docs/SITE.md, шаг 2): главная, расписание (с идущим и прошедшими турнирами), рейтинг, игрок, о клубе.
 
 import Image from "next/image";
 import Link from "next/link";
@@ -8,6 +8,7 @@ import { useState } from "react";
 import logo from "@/assets/logo.png";
 import { formatSiteDate, playersWord, type SiteArchive, type SiteFacts, type SitePlayer, type SiteRating } from "@/lib/site";
 import { AboutBlock } from "./AboutBlock";
+import { LivePanel, useLive } from "./LivePanel";
 import { Podium, RatingTable } from "./RatingTable";
 import { ResultsList } from "./ResultsList";
 import { ScheduleList } from "./ScheduleList";
@@ -31,6 +32,7 @@ const SectionHead = ({ title, href, more }: { title: string; href: string; more:
 export function HomePage() {
   const { data: rating } = useSite<SiteRating>("rating");
   const { data: facts } = useSite<SiteFacts>("facts");
+  const live = useLive();
   const month = rating?.open[0];
   const table = month?.rows.length ? month.rows : (rating?.all ?? []);
   const tiles = [
@@ -71,9 +73,15 @@ export function HomePage() {
         ))}
       </section>
 
+      {live && (
+        <section className="mb-10 sm:mb-14">
+          <LivePanel live={live} />
+        </section>
+      )}
+
       <section className="mb-10 sm:mb-14">
         <SectionHead title="Ближайшие турниры" href="/schedule" more="Всё расписание" />
-        <ScheduleList limit={3} />
+        <ScheduleList limit={3} hideStarted={!!live} />
       </section>
 
       <section className="mb-10 grid gap-8 lg:grid-cols-2 sm:mb-14">
@@ -82,7 +90,7 @@ export function HomePage() {
           <Panel>{rating ? <RatingTable rows={table} limit={5} /> : <Muted>Загрузка…</Muted>}</Panel>
         </div>
         <div>
-          <SectionHead title="Последние турниры" href="/results" more="Все итоги" />
+          <SectionHead title="Последние турниры" href="/schedule" more="Все прошедшие" />
           <Panel>
             <ResultsList limit={2} />
           </Panel>
@@ -124,10 +132,20 @@ export function HomePage() {
 // ---------- Расписание ----------
 
 export function SchedulePage() {
+  const live = useLive();
   return (
     <SiteShell>
       <PageTitle sub="Время — воронежское. Приходите за 15–20 минут до начала.">Расписание турниров</PageTitle>
-      <ScheduleList />
+      {live && (
+        <div className="mb-6">
+          <LivePanel live={live} />
+        </div>
+      )}
+      <ScheduleList hideStarted={!!live} />
+      <h2 className="mb-4 mt-10 text-2xl font-black tracking-tight sm:text-3xl">Прошедшие турниры</h2>
+      <Panel>
+        <ResultsList limit={10} step={10} />
+      </Panel>
     </SiteShell>
   );
 }
@@ -252,19 +270,6 @@ function ArchiveView({ id }: { id: number }) {
       )}
       <RatingTable rows={data.rows} zone={data.finalistsN} />
     </>
-  );
-}
-
-// ---------- Итоги ----------
-
-export function ResultsPage() {
-  return (
-    <SiteShell>
-      <PageTitle sub="Победители и призёры прошедших турниров.">Итоги турниров</PageTitle>
-      <Panel>
-        <ResultsList />
-      </Panel>
-    </SiteShell>
   );
 }
 

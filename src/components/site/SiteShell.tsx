@@ -12,7 +12,6 @@ import logo from "@/assets/logo.png";
 const NAV = [
   { href: "/schedule", label: "Расписание" },
   { href: "/rating", label: "Рейтинг" },
-  { href: "/results", label: "Итоги" },
   { href: "/about", label: "О клубе" },
 ];
 
@@ -109,25 +108,31 @@ export const formatKo = (ko: number) => String(ko).replace(".", ",");
 
 /**
  * Загрузить данные сайта: /api/site?get=…  (query — без «?get=», например "rating" или "player&id=5").
- * null в query — ничего не загружать.
+ * null в query — ничего не загружать. refreshMs — перечитывать раз в столько мс.
+ * keep — пока грузится новый запрос, показывать ответ на прежний (список не мигает при «Показать ещё»).
  */
-export function useSite<T>(query: string | null): { data: T | null; error: string; loading: boolean } {
+export function useSite<T>(query: string | null, refreshMs = 0, keep = false): { data: T | null; error: string; loading: boolean } {
   const [state, setState] = useState<{ query: string | null; data: T | null; error: string }>({ query: null, data: null, error: "" });
   useEffect(() => {
     if (query == null) return;
     let alive = true;
-    fetch(`/api/site?get=${query}`, { cache: "no-store" })
-      .then(async (res) => {
-        const d = await res.json();
-        if (!alive) return;
-        if (res.ok) setState({ query, data: d as T, error: "" });
-        else setState({ query, data: null, error: d.error ?? "Не удалось загрузить" });
-      })
-      .catch(() => alive && setState({ query, data: null, error: "Нет связи с сервером" }));
+    const load = (again: boolean) =>
+      fetch(`/api/site?get=${query}`, { cache: "no-store" })
+        .then(async (res) => {
+          const d = await res.json();
+          if (!alive) return;
+          if (res.ok) setState({ query, data: d as T, error: "" });
+          else if (!again) setState({ query, data: null, error: d.error ?? "Не удалось загрузить" });
+        })
+        // при повторной загрузке (refreshMs) обрыв связи не стирает уже показанное
+        .catch(() => alive && !again && setState({ query, data: null, error: "Нет связи с сервером" }));
+    load(false);
+    const timer = refreshMs > 0 ? setInterval(() => load(true), refreshMs) : null;
     return () => {
       alive = false;
+      if (timer) clearInterval(timer);
     };
-  }, [query]);
+  }, [query, refreshMs]);
   const fresh = state.query === query;
-  return { data: fresh ? state.data : null, error: fresh ? state.error : "", loading: query != null && !fresh };
+  return { data: fresh || (keep && query != null) ? state.data : null, error: fresh ? state.error : "", loading: query != null && !fresh };
 }

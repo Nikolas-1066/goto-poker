@@ -8,11 +8,13 @@ import { dayHint, formatDay } from "@/lib/schedule";
 import type { SiteScheduleItem } from "@/lib/site";
 import { Muted, useSite } from "./SiteShell";
 
-export function ScheduleList({ limit }: { limit?: number }) {
+/** hideStarted — открытый сегодня турнир уже показан отдельным блоком «Идёт сейчас» */
+export function ScheduleList({ limit, hideStarted = false }: { limit?: number; hideStarted?: boolean }) {
   const { data, error, loading } = useSite<{ today: string; items: SiteScheduleItem[] }>("schedule");
   if (loading) return <Muted>Загрузка…</Muted>;
   if (!data) return <Muted>{error || "Расписание скоро появится"}</Muted>;
-  const items = limit ? data.items.slice(0, limit) : data.items;
+  const all = hideStarted ? data.items.filter((it) => !it.started) : data.items;
+  const items = limit ? all.slice(0, limit) : all;
   if (!items.length) return <Muted>Ближайших турниров пока нет — загляните позже.</Muted>;
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
