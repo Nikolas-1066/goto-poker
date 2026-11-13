@@ -4,7 +4,10 @@
 // Отсюда же турнир открывают — он становится текущим на табло и в «Управлении».
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { ScheduleSignups } from "@/components/admin/Signups";
+import type { AdminSignup } from "@/lib/db/signups";
+import type { Player } from "@/lib/players";
 import { AboutEditor } from "@/components/admin/AboutEditor";
 import { FinalistMessageEditor } from "@/components/admin/Accounts";
 import { AdminShell } from "@/components/admin/AdminShell";
@@ -22,7 +25,7 @@ export default function SchedulePage() {
   );
 }
 
-type Data = { today: string; items: ScheduleItem[]; templates: ScheduleTemplate[] };
+type Data = { today: string; items: ScheduleItem[]; templates: ScheduleTemplate[]; signups: Record<number, AdminSignup[]> };
 /** Поля формы — строками, как в полях ввода */
 type Draft = { date: string; weekday: string; time: string; name: string; presetId: string; seatLimit: string; note: string };
 type Editing = { kind: "item" | "template"; id: number | null; draft: Draft } | null;
@@ -35,6 +38,8 @@ function Schedule() {
   const [flash, setFlash] = useState("");
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<Editing>(null);
+  /** Игроки базы — чтобы записать игрока на турнир вручную */
+  const [players, setPlayers] = useState<Player[]>([]);
 
   useEffect(() => {
     // первая загрузка: расписание и список структур
@@ -46,6 +51,10 @@ function Schedule() {
         setPresets((await p.json()).presets ?? []);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Не удалось загрузить расписание"));
+    fetch("/api/players", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { players: [] }))
+      .then((d) => setPlayers(d.players ?? []))
+      .catch(() => {});
   }, []);
 
   async function act(action: object, confirmText?: string): Promise<boolean> {
@@ -60,7 +69,7 @@ function Schedule() {
         setError(d.error ?? "Не получилось");
         return false;
       }
-      setData({ today: d.today, items: d.items, templates: d.templates });
+      setData({ today: d.today, items: d.items, templates: d.templates, signups: d.signups ?? {} });
       setFlash(d.message ?? "");
       return true;
     } catch {
@@ -150,6 +159,18 @@ function Schedule() {
                   today={data.today}
                   preset={presetOf(it.presetId)}
                   busy={busy}
+                  signups={
+                    it.status === "cancelled" ? null : (
+                      <ScheduleSignups
+                        signups={data.signups?.[it.id] ?? []}
+                        seatLimit={it.seatLimit}
+                        players={players}
+                        busy={busy}
+                        onAdd={(playerId, guests) => act({ type: "signupAdd", id: it.id, playerId, data: { guests } })}
+                        onRemove={(su) => act({ type: "signupRemove", signupId: su.id }, `Снять запись «${su.name}» на «${it.name}»?`)}
+                      />
+                    )
+                  }
                   onEdit={() => setEditing({ kind: "item", id: it.id, draft: draftOf(it) })}
                   onCancel={() => act({ type: "cancel", id: it.id }, `Отменить турнир «${it.name}» ${formatDay(it.date)}?`)}
                   onRestore={() => act({ type: "restore", id: it.id })}
@@ -225,6 +246,7 @@ function ItemRow({
   today,
   preset,
   busy,
+  signups,
   onEdit,
   onCancel,
   onRestore,
@@ -234,6 +256,7 @@ function ItemRow({
   today: string;
   preset: Preset | undefined;
   busy: boolean;
+  signups: ReactNode;
   onEdit: () => void;
   onCancel: () => void;
   onRestore: () => void;
@@ -283,6 +306,7 @@ function ItemRow({
           </Button>
         )}
       </div>
+      {signups}
     </div>
   );
 }

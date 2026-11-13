@@ -215,6 +215,7 @@ describe("расписание на сайте", () => {
         seatLimit: 27,
         started: false,
         structure: { name: preset.name, startingStack: preset.starting_stack, entryPrice: 800 },
+        signups: { going: [], waiting: [], seats: 0, free: 27, open: true },
       },
     ]);
   });

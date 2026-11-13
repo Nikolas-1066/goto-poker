@@ -6,18 +6,21 @@ import { formatRub } from "@/lib/cash";
 import { formatChips } from "@/lib/clock";
 import { dayHint, formatDay } from "@/lib/schedule";
 import type { SiteScheduleItem } from "@/lib/site";
+import { useState } from "react";
+import { SignupBox } from "./Signup";
 import { Muted, useSite } from "./SiteShell";
 
 /** hideStarted — открытый сегодня турнир уже показан отдельным блоком «Идёт сейчас» */
 export function ScheduleList({ limit, hideStarted = false }: { limit?: number; hideStarted?: boolean }) {
-  const { data, error, loading } = useSite<{ today: string; items: SiteScheduleItem[] }>("schedule");
-  if (loading) return <Muted>Загрузка…</Muted>;
-  if (!data) return <Muted>{error || "Расписание скоро появится"}</Muted>;
+  // после записи или отмены расписание перечитывается (список записавшихся и свободные места)
+  const [version, setVersion] = useState(0);
+  const { data, error, loading } = useSite<{ today: string; items: SiteScheduleItem[] }>(`schedule&v=${version}`, 60_000, true);
+  if (!data) return <Muted>{loading ? "Загрузка…" : error || "Расписание скоро появится"}</Muted>;
   const all = hideStarted ? data.items.filter((it) => !it.started) : data.items;
   const items = limit ? all.slice(0, limit) : all;
   if (!items.length) return <Muted>Ближайших турниров пока нет — загляните позже.</Muted>;
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {items.map((it) => {
         const hint = dayHint(it.date, data.today);
         const facts = [
@@ -53,6 +56,9 @@ export function ScheduleList({ limit, hideStarted = false }: { limit?: number; h
                 ))}
               </dl>
             )}
+            <div className="mt-auto">
+              <SignupBox scheduleId={it.id} signups={it.signups} onChange={() => setVersion((v) => v + 1)} />
+            </div>
           </article>
         );
       })}

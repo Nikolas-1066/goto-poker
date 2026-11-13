@@ -1,6 +1,8 @@
 // Сайт клуба (docs/SITE.md, шаг 2): типы открытых данных и текст «О клубе» — чистые функции.
 // На сайт уходят только имена, места, очки, нокауты и ELO. Телефоны, заметки, касса и долги — никогда.
 
+import type { SiteSignups } from "./signup";
+
 export type SiteStanding = { rank: number; playerId: number; name: string; points: number; tournaments: number; wins: number; ko: number };
 
 export type SitePeriod = {
@@ -85,6 +87,8 @@ export type SiteScheduleItem = {
   /** Турнир уже открыт в клубе (идёт сегодня) */
   started: boolean;
   structure: { name: string; startingStack: number; entryPrice: number } | null;
+  /** Кто записался: имена и число гостей, лист ожидания, сколько мест свободно */
+  signups: SiteSignups;
 };
 
 /** Цифры клуба для главной — считаются по базе, ничего не придумано */

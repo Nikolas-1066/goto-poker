@@ -7,6 +7,7 @@ import { finalProgress, PASSWORD_MIN, type AccountMe } from "@/lib/account";
 import type { SitePlayer } from "@/lib/site";
 import { Avatar, fileToJpeg, refreshPhotos } from "./Avatar";
 import { PlayerStats } from "./PlayerStats";
+import { MySignupsPanel } from "./Signup";
 import { GOLD, Muted, OUTLINE, PageTitle, Panel, SiteShell, useSite } from "./SiteShell";
 import { accountAction, useMe } from "./useMe";
 
@@ -143,6 +144,7 @@ function Profile({ me }: { me: Extract<AccountMe, { status: "active" }> }) {
       )}
 
       <FinalPath zones={me.zones} />
+      <MySignupsPanel />
 
 
       <h2 className="mb-4 text-2xl font-black tracking-tight sm:text-3xl">Моя статистика</h2>

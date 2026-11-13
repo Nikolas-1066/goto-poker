@@ -295,4 +295,24 @@ export const MIGRATIONS: string[] = [
     updated_at INTEGER NOT NULL
   );
   `,
+  // 9 — запись игроков на будущие турниры (docs/SITE.md, шаг 4) и бонус «приведи друга».
+  // signups: кто записался на строку расписания. Записаться может и тот, чью заявку на вход ещё не подтвердили
+  // (account_id есть, игрока пока нет); админ записывает игрока из базы (player_id, by_admin = 1).
+  // Лист ожидания не хранится — считается по порядку записи и лимиту мест.
+  // participants.brought_by — кто привёл этого новичка в клуб (участник того же турнира).
+  `
+  CREATE TABLE signups (
+    id           INTEGER PRIMARY KEY,
+    schedule_id  INTEGER NOT NULL REFERENCES schedule (id),
+    account_id   INTEGER REFERENCES accounts (id),
+    player_id    INTEGER REFERENCES players (id),
+    guests       INTEGER NOT NULL DEFAULT 0 CHECK (guests BETWEEN 0 AND 3),
+    guest_names  TEXT NOT NULL DEFAULT '[]',
+    by_admin     INTEGER NOT NULL DEFAULT 0,
+    created_at   INTEGER NOT NULL,
+    cancelled_at INTEGER
+  );
+  CREATE INDEX signups_schedule ON signups (schedule_id);
+  ALTER TABLE participants ADD COLUMN brought_by INTEGER REFERENCES participants (id);
+  `,
 ];

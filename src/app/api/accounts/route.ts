@@ -14,7 +14,8 @@ import {
   setPhoto,
 } from "@/lib/db/accounts";
 import { photoBytes } from "@/lib/playerAuth";
-import { withDatabase } from "@/lib/store";
+import { syncAllSignups } from "@/lib/db/signups";
+import { updateDb, withDatabase } from "@/lib/store";
 
 // Админка: заявки игроков на вход, вход и фото в карточке игрока, сообщение финалистам.
 
@@ -46,6 +47,18 @@ export async function POST(req: NextRequest) {
   const id = Number(body.id);
   const playerId = body.playerId == null || body.playerId === "" ? null : Number(body.playerId);
   try {
+    if (body.action === "confirm") {
+      // у записей этого человека на турниры появился игрок — если турнир уже открыт, он попадает в него
+      let result: unknown;
+      await updateDb(
+        (db) => db.tournament,
+        (sqlite, next) => {
+          result = { ...confirmRequest(sqlite, id, playerId), requests: listRequests(sqlite) };
+          syncAllSignups(sqlite, next);
+        },
+      );
+      return json(result);
+    }
     return json(
       await withDatabase((db) => {
         const needPlayer = () => {
@@ -53,8 +66,6 @@ export async function POST(req: NextRequest) {
           return playerId;
         };
         switch (body.action) {
-          case "confirm":
-            return { ...confirmRequest(db, id, playerId), requests: listRequests(db) };
           case "reject":
             rejectRequest(db, id);
             return { requests: listRequests(db) };

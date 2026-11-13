@@ -27,6 +27,7 @@ import { finalistsOf, getPeriod, listPeriods, openPeriod, PERIOD_LABEL, standing
 import { playerCard } from "./playercard";
 import { ensureSchedule, listSchedule } from "./schedule";
 import { getSettings, type PeriodKind } from "./settings";
+import { siteSignups } from "./signups";
 import { audit, loadState } from "./sqlite";
 import { currentTournament, listParticipants } from "./tournament";
 
@@ -266,6 +267,7 @@ export function siteSchedule(db: DatabaseSync, now = Date.now()): { today: strin
       seatLimit: it.seatLimit,
       started: it.status === "started",
       structure: presets.get(it.presetId) ?? null,
+      signups: siteSignups(db, it, now),
     }));
   return { today, items };
 }

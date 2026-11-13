@@ -50,6 +50,8 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
   const [cashSummary, setCashSummary] = useState<CashSummary | null>(null);
   /** Рассадка: настройки клуба и вид «Список / Столы» (запоминается на этом устройстве) */
   const [seating, setSeating] = useState<SeatingSettings>(DEFAULT_SEATING);
+  /** Кто записался на сайте с гостями: { [playerId]: { guests, guestNames } } — видно, что прийти должен не один */
+  const [guests, setGuests] = useState<Record<number, { guests: number; guestNames: string[] }>>({});
   const [view, setView] = useState<"list" | "tables">("list");
   useEffect(() => {
     try {
@@ -137,6 +139,7 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
       setFinal(data.final ?? null);
       setCashSummary(data.cash ?? null);
       if (data.seating) setSeating(data.seating);
+      setGuests(data.guests ?? {});
     }
     else setError(data.error ?? "Не удалось загрузить участников");
   }, []);
@@ -419,6 +422,14 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
         <Section title={`Записались · ${registered.length}`}>
           {registered.map((p) => (
             <Row key={p.id} p={p} {...seatable(p)} {...cashable(p)}>
+              {guests[p.playerId] && (
+                <span
+                  className="rounded-md bg-amber-300/15 px-1.5 py-0.5 text-xs font-bold text-amber-300"
+                  title={guests[p.playerId].guestNames.length ? `Гости: ${guests[p.playerId].guestNames.join(", ")}` : "Записался на сайте с гостями"}
+                >
+                  +{guests[p.playerId].guests} {guests[p.playerId].guests === 1 ? "гость" : "гостя"}
+                </span>
+              )}
               <Button variant="ghost" title="Убрать из записи" disabled={busy} onClick={() => act({ type: "unregister", participantId: p.id })}>
                 ✕
               </Button>
