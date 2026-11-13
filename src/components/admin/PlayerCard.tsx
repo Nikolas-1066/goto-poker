@@ -10,6 +10,7 @@ import { formatEloDelta } from "@/lib/rating/elo";
 import { KIND_LABEL } from "@/lib/rating/points";
 import { formatPlace } from "@/lib/results";
 import { formatRub, type PayMethod } from "@/lib/cash";
+import { PlayerAccount } from "./Accounts";
 import { OldDebtsPanel } from "./Cash";
 import { PlayerForm } from "./PlayerForm";
 import { Button, Card } from "./ui";
@@ -92,6 +93,8 @@ export function PlayerCard({ id }: { id: number }) {
             Изменить
           </Button>
         </Card>
+
+        <PlayerAccount playerId={player.id} name={player.name} />
 
         {(debts.total > 0 || flash) && (
           <Card title={debts.total > 0 ? `Долг · ${formatRub(debts.total)}` : "Долг"}>

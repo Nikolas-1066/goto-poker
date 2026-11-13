@@ -76,6 +76,10 @@ Telegram Mini App для игроков. Архитектуру делать т�
 - Сайт клуба (`docs/SITE.md`, шаг 2 Этапа 3): `/`, `/schedule` (ближайшие + блок «идёт сейчас» `LivePanel.tsx` + прошедшие с итогами), `/rating`, `/players/[id]`, `/about` — без пароля.
   Компоненты `src/components/site/`, данные `/api/site?get=…` из `src/lib/db/site.ts` (**только имена, места, очки, KO, ELO** —
   поля перечислены явно, тест следит, что телефоны/заметки/деньги не утекают), «О клубе» — `src/lib/site.ts` + `AboutEditor.tsx`.
+- Вход игрока и личный кабинет (`docs/SITE.md`, шаг 3 Этапа 3): `/profile` — заявка (подтверждает админ в «Игроках»), вход по
+  телефону и паролю, ник, пароль, фото, «путь в финал», плашка финалиста. Чистые функции `src/lib/account.ts`, база
+  `src/lib/db/accounts.ts` (миграция 8), cookie `goto_player` (`src/lib/playerAuth.ts`), API `/api/account`, `/api/accounts` (админ),
+  `/api/photo`. UI: `src/components/site/Account.tsx`, `Avatar.tsx` (фото или первая буква ника — везде на сайте), админка `Accounts.tsx`.
 - Отчёт владельцу после турнира: `src/lib/report.ts` (сдвиг мест, текст), `src/lib/db/report.ts`, `/api/report`;
   UI `src/components/admin/Report.tsx` (текст + «Скопировать» работает и по http, напоминание до копирования)
   и `ReportImages.tsx` (3 картинки на canvas без кассы). В карточке «Игроки» после завершения и в «Истории».

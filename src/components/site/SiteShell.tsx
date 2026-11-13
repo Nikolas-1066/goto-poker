@@ -8,6 +8,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import logo from "@/assets/logo.png";
+import { Avatar } from "./Avatar";
+import { useMe } from "./useMe";
 
 const NAV = [
   { href: "/schedule", label: "Расписание" },
@@ -23,6 +25,7 @@ export const OUTLINE = "border border-amber-300/50 text-amber-100 font-semibold 
 
 export function SiteShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const me = useMe();
   return (
     <main className="relative flex min-h-screen flex-col bg-[#080e15] text-white">
       {/* мягкое свечение сверху: тёмно-синее с золотым отливом */}
@@ -53,6 +56,17 @@ export function SiteShell({ children }: { children: ReactNode }) {
               );
             })}
           </nav>
+          {/* вход игрока: «Войти» или аватар с ником */}
+          {me?.status === "active" ? (
+            <Link href="/profile" className="flex shrink-0 items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-white/[0.06]" title="Личный кабинет">
+              <Avatar id={me.playerId} name={me.name} version={me.photo} className="h-8 w-8 border border-amber-300/60 text-sm text-amber-200" />
+              <span className="hidden max-w-[9rem] truncate text-sm font-semibold sm:inline">{me.name}</span>
+            </Link>
+          ) : (
+            <Link href="/profile" className={`shrink-0 rounded-lg px-3 py-2 text-sm ${pathname === "/profile" ? GOLD : OUTLINE} ${me ? "" : "invisible"}`}>
+              {me?.status === "pending" ? "Заявка" : "Войти"}
+            </Link>
+          )}
         </div>
       </header>
 

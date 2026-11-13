@@ -3,6 +3,7 @@
 // Таблица рейтинга на сайте: место, игрок, очки, турниры, победы, нокауты. Золотая черта — зона финала.
 
 import type { SiteStanding } from "@/lib/site";
+import { Avatar } from "./Avatar";
 import { formatKo, Muted, PlayerLink } from "./SiteShell";
 
 const medal = (rank: number) => (rank === 1 ? "text-amber-300" : rank === 2 ? "text-slate-200" : rank === 3 ? "text-orange-300" : "text-slate-500");
@@ -32,7 +33,8 @@ export function RatingTable({ rows, zone, limit, empty }: { rows: SiteStanding[]
           {list.map((r) => (
             <tr key={r.playerId} className={`border-t ${showZone && r.rank === zone + 1 ? "border-t-2 border-amber-300/70" : "border-white/[0.06]"}`}>
               <td className={`px-1 py-2.5 font-bold tabular-nums ${medal(r.rank)}`}>{r.rank}</td>
-              <td className="max-w-0 truncate px-1 py-2.5 font-semibold">
+              <td className="max-w-0 truncate px-1 py-2 font-semibold">
+                <Avatar id={r.playerId} name={r.name} className="mr-2 h-7 w-7 border border-white/10 align-middle text-xs text-slate-300" />
                 <PlayerLink id={r.playerId} name={r.name} />
               </td>
               <td className="px-1 py-2.5 text-right font-bold tabular-nums text-amber-200">{r.points.toLocaleString("ru-RU")}</td>
@@ -69,13 +71,11 @@ export function Podium({ rows }: { rows: SiteStanding[] }) {
             <div className={`mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-b text-sm font-black text-[#080e15] sm:h-11 sm:w-11 sm:text-base ${s.badge}`}>
               {r.rank}
             </div>
-            <div
-              className={`mx-auto mt-3 flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05] font-black uppercase ${s.tone} ${
-                i === 0 ? "h-14 w-14 text-2xl sm:h-20 sm:w-20 sm:text-4xl" : "h-12 w-12 text-xl sm:h-16 sm:w-16 sm:text-3xl"
-              }`}
-            >
-              {r.name.trim().charAt(0)}
-            </div>
+            <Avatar
+              id={r.playerId}
+              name={r.name}
+              className={`mx-auto mt-3 border border-white/15 ${s.tone} ${i === 0 ? "h-14 w-14 text-2xl sm:h-20 sm:w-20 sm:text-4xl" : "h-12 w-12 text-xl sm:h-16 sm:w-16 sm:text-3xl"}`}
+            />
             <div className="mt-2 truncate text-sm font-bold sm:text-lg">
               <PlayerLink id={r.playerId} name={r.name} />
             </div>

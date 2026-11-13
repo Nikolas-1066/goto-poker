@@ -5,6 +5,7 @@
 
 import { formatChips } from "@/lib/clock";
 import type { SiteLive } from "@/lib/site";
+import { Avatar } from "./Avatar";
 import { formatKo, PlayerLink, useSite } from "./SiteShell";
 
 export const useLive = () => useSite<{ live: SiteLive | null }>("live", 20_000).data?.live ?? null;
@@ -45,6 +46,7 @@ export function LivePanel({ live }: { live: SiteLive }) {
           <div className="space-y-1.5 text-sm">
             {live.players.map((p) => (
               <div key={p.playerId} className="flex items-center gap-2">
+                <Avatar id={p.playerId} name={p.name} className="h-6 w-6 border border-white/10 text-[11px] text-slate-300" />
                 <PlayerLink id={p.playerId} name={p.name} className="min-w-0 flex-1 truncate font-semibold" />
                 <span className={`shrink-0 tabular-nums ${p.ko > 0 ? "font-bold text-amber-200" : "text-slate-600"}`}>{p.ko > 0 ? `KO ${formatKo(p.ko)}` : "—"}</span>
               </div>

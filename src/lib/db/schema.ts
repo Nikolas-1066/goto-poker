@@ -267,4 +267,32 @@ export const MIGRATIONS: string[] = [
   CREATE UNIQUE INDEX schedule_template_date ON schedule (template_id, date) WHERE template_id IS NOT NULL;
   CREATE INDEX schedule_date ON schedule (date, time);
   `,
+  // 8 — вход игроков на сайт (docs/SITE.md, шаг 3) и фото игроков.
+  // accounts: заявка на вход (player_id пуст, пока админ не подтвердил) и сам вход. Логин — телефон.
+  // account_sessions: открытые входы; в cookie лежит случайная строка, в базе — только её хэш.
+  // player_photos: маленькая квадратная картинка JPEG (уменьшается в браузере перед загрузкой).
+  `
+  CREATE TABLE accounts (
+    id           INTEGER PRIMARY KEY,
+    phone        TEXT NOT NULL UNIQUE,
+    name         TEXT NOT NULL,
+    pass_salt    TEXT NOT NULL,
+    pass_hash    TEXT NOT NULL,
+    player_id    INTEGER UNIQUE REFERENCES players (id),
+    created_at   INTEGER NOT NULL,
+    confirmed_at INTEGER
+  );
+  CREATE TABLE account_sessions (
+    token_hash TEXT PRIMARY KEY,
+    account_id INTEGER NOT NULL REFERENCES accounts (id),
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+  );
+  CREATE INDEX account_sessions_account ON account_sessions (account_id);
+  CREATE TABLE player_photos (
+    player_id  INTEGER PRIMARY KEY REFERENCES players (id),
+    jpeg       BLOB NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  `,
 ];

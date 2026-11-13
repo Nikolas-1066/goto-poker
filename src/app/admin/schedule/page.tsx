@@ -6,6 +6,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AboutEditor } from "@/components/admin/AboutEditor";
+import { FinalistMessageEditor } from "@/components/admin/Accounts";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Button, Card, Field, inputClass } from "@/components/admin/ui";
 import { formatRub } from "@/lib/cash";
@@ -212,6 +213,7 @@ function Schedule() {
             </div>
           </Card>
           <AboutEditor />
+          <FinalistMessageEditor />
         </div>
       </div>
     </div>

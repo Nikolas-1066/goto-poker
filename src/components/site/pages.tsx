@@ -8,6 +8,7 @@ import { useState } from "react";
 import logo from "@/assets/logo.png";
 import { formatSiteDate, playersWord, type SiteArchive, type SiteFacts, type SitePlayer, type SiteRating } from "@/lib/site";
 import { AboutBlock } from "./AboutBlock";
+import { Avatar } from "./Avatar";
 import { LivePanel, useLive } from "./LivePanel";
 import { Podium, RatingTable } from "./RatingTable";
 import { ResultsList } from "./ResultsList";
@@ -279,7 +280,13 @@ export function PlayerPage({ id }: { id: number }) {
       {!loading && !p && <Muted>{error || "Игрок не найден"}</Muted>}
       {p && (
         <>
-          <PageTitle sub={p.finals.length ? `Финалист: ${p.finals.join(", ")}` : undefined}>{p.name}</PageTitle>
+          <div className="mb-4 flex items-center gap-4 sm:mb-6">
+            <Avatar id={p.id} name={p.name} className="h-16 w-16 border-2 border-amber-300/70 text-3xl text-amber-200 sm:h-20 sm:w-20" />
+            <div className="min-w-0">
+              <h1 className="truncate text-3xl font-black tracking-tight sm:text-4xl">{p.name}</h1>
+              {p.finals.length > 0 && <p className="mt-1 text-sm text-slate-400">Финалист: {p.finals.join(", ")}</p>}
+            </div>
+          </div>
           <div className="mb-4 grid grid-cols-3 gap-2 sm:grid-cols-6">
             {[
               ["Очки", p.stats.points.toLocaleString("ru-RU")],

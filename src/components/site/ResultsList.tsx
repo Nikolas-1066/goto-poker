@@ -5,6 +5,7 @@
 
 import { useState, type KeyboardEvent, type MouseEvent } from "react";
 import { formatSiteDate, playersWord, type SiteResult, type SiteResultFull } from "@/lib/site";
+import { Avatar } from "./Avatar";
 import { formatKo, Muted, OUTLINE, PlayerLink, useSite } from "./SiteShell";
 
 const PLACE_STYLE = ["bg-amber-300 text-[#080e15]", "bg-slate-300 text-[#080e15]", "bg-orange-400/90 text-[#080e15]"];
@@ -51,9 +52,7 @@ function ResultPodium({ top }: { top: Row[] }) {
         return (
           <div key={r.playerId} className={`min-w-0 text-center ${top.length === 1 ? "col-start-2" : ""}`}>
             <div className="relative mx-auto w-fit">
-              <div className={`flex items-center justify-center rounded-full border-2 bg-[#0b131c] font-black uppercase ${RING[i]} ${i === 0 ? "h-14 w-14 text-2xl" : "h-11 w-11 text-lg"}`}>
-                {[...r.name.trim()][0] ?? "?"}
-              </div>
+              <Avatar id={r.playerId} name={r.name} className={`border-2 ${RING[i]} ${i === 0 ? "h-14 w-14 text-2xl" : "h-11 w-11 text-lg"}`} />
               <span className={`absolute -bottom-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-black tabular-nums ${PLACE_STYLE[i]}`}>{r.place}</span>
             </div>
             <PlayerLink id={r.playerId} name={r.name} className="mt-2 block truncate text-sm font-bold" />

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { AccountRequests } from "@/components/admin/Accounts";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { PlayerForm, type PlayerDraft } from "@/components/admin/PlayerForm";
 import { Button, Card, inputClass } from "@/components/admin/ui";
@@ -69,6 +70,7 @@ function Players() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
+      {!draft && <AccountRequests players={players} onChange={load} />}
       {draft ? (
         <PlayerForm
           key={draft.id ?? "new"}
