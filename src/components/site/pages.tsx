@@ -91,9 +91,7 @@ export function HomePage() {
         </div>
         <div>
           <SectionHead title="Последние турниры" href="/schedule" more="Все прошедшие" />
-          <Panel>
-            <ResultsList limit={2} />
-          </Panel>
+          <ResultsList limit={2} />
         </div>
       </section>
 
@@ -143,9 +141,7 @@ export function SchedulePage() {
       )}
       <ScheduleList hideStarted={!!live} />
       <h2 className="mb-4 mt-10 text-2xl font-black tracking-tight sm:text-3xl">Прошедшие турниры</h2>
-      <Panel>
-        <ResultsList limit={10} step={10} />
-      </Panel>
+      <ResultsList limit={10} step={10} wide />
     </SiteShell>
   );
 }

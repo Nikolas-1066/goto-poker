@@ -1,6 +1,6 @@
 "use client";
 
-// Прошедшие турниры: по каждому — топ-3 и сколько было игроков; по нажатию — все места (решение владельца).
+// Прошедшие турниры карточками, как расписание: по каждому — топ-3 и сколько было игроков; по нажатию — все места (решение владельца).
 // На странице «Расписание» — последние 10 и кнопка «Показать ещё».
 
 import { useState } from "react";
@@ -36,7 +36,8 @@ function FullTable({ id, top }: { id: number; top: Row[] }) {
   return <Rows rows={data.rows} />;
 }
 
-export function ResultsList({ limit, step = 0 }: { limit: number; step?: number }) {
+/** wide — карточки в 2–3 колонки, как расписание; иначе одной колонкой (главная) */
+export function ResultsList({ limit, step = 0, wide = false }: { limit: number; step?: number; wide?: boolean }) {
   const [shown, setShown] = useState(limit);
   const [open, setOpen] = useState<number | null>(null);
   const { data, error, loading } = useSite<{ results: SiteResult[]; total: number }>(`results&limit=${shown}`, 0, true);
@@ -45,33 +46,33 @@ export function ResultsList({ limit, step = 0 }: { limit: number; step?: number 
   if (!list.length) return <Muted>Сыгранных турниров пока нет.</Muted>;
   return (
     <>
-      <div className="divide-y divide-white/[0.06]">
+      <div className={`grid items-start gap-4 ${wide ? "sm:grid-cols-2 lg:grid-cols-3" : ""}`}>
         {list.map((t) => {
           const expanded = open === t.id;
           const canExpand = t.players > t.top.length;
           return (
-            <div key={t.id} className="py-3">
-              <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                <div className="font-bold">
-                  {t.name}
-                  {t.kindLabel && <span className="ml-2 rounded-md bg-amber-300/15 px-1.5 py-0.5 text-xs font-bold text-amber-300">{t.kindLabel}</span>}
-                </div>
-                <div className="text-sm text-slate-400">
-                  {formatSiteDate(t.at)} · {playersWord(t.players)}
-                </div>
+            <article
+              key={t.id}
+              className="flex flex-col rounded-2xl border border-white/[0.08] bg-[#0f1822]/90 p-5 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.9)] transition hover:border-amber-300/40"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="text-sm text-slate-400">{formatSiteDate(t.at)}</div>
+                <span className="shrink-0 rounded-full bg-white/[0.07] px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-300">{playersWord(t.players)}</span>
               </div>
-              {expanded ? <FullTable id={t.id} top={t.top} /> : <Rows rows={t.top} />}
+              <h3 className="mt-2 text-xl font-bold leading-tight">{t.name}</h3>
+              {t.kindLabel && <div className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-amber-300">{t.kindLabel}</div>}
+              <div className="mt-3 border-t border-white/[0.07] pt-2">{expanded ? <FullTable id={t.id} top={t.top} /> : <Rows rows={t.top} />}</div>
               {canExpand && (
-                <button type="button" onClick={() => setOpen(expanded ? null : t.id)} className="mt-2 text-sm text-slate-400 hover:text-amber-200">
+                <button type="button" onClick={() => setOpen(expanded ? null : t.id)} className="mt-3 self-start text-sm text-slate-400 hover:text-amber-200">
                   {expanded ? "Свернуть ↑" : "Все места ↓"}
                 </button>
               )}
-            </div>
+            </article>
           );
         })}
       </div>
       {step > 0 && data.total > list.length && (
-        <div className="mt-3 text-center">
+        <div className="mt-5 text-center">
           <button type="button" disabled={loading} onClick={() => setShown(list.length + step)} className={`rounded-xl px-5 py-2.5 text-sm ${OUTLINE}`}>
             {loading ? "Загрузка…" : "Показать ещё"}
           </button>
