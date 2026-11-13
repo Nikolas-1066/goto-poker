@@ -128,14 +128,7 @@ function Logout({ className = "" }: { className?: string }) {
 function Profile({ me }: { me: Extract<AccountMe, { status: "active" }> }) {
   return (
     <>
-      <div className="mb-5 flex flex-wrap items-center gap-4">
-        <Avatar id={me.playerId} name={me.name} version={me.photo} className="h-20 w-20 border-2 border-amber-300/70 text-4xl text-amber-200 sm:h-24 sm:w-24" />
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-3xl font-black tracking-tight sm:text-4xl">{me.name}</h1>
-          <p className="text-sm text-slate-400">{me.phone} · телефон виден только вам и клубу</p>
-        </div>
-        <Logout />
-      </div>
+      <ProfileHead me={me} />
 
       {me.finalistOf.length > 0 && (
         <section className="mb-5 rounded-2xl border border-amber-300/50 bg-gradient-to-b from-amber-300/[0.16] to-transparent p-5 shadow-[0_0_60px_-25px_rgba(252,211,77,0.8)]">
@@ -170,13 +163,6 @@ function Profile({ me }: { me: Extract<AccountMe, { status: "active" }> }) {
 
       <h2 className="mb-4 text-2xl font-black tracking-tight sm:text-3xl">Моя статистика</h2>
       <MyStats playerId={me.playerId} name={me.name} />
-
-      <h2 className="mb-4 mt-8 text-2xl font-black tracking-tight sm:text-3xl">Настройки</h2>
-      <div className="grid items-start gap-4 lg:grid-cols-3">
-        <PhotoPanel me={me} />
-        <NickPanel key={me.name} name={me.name} />
-        <PasswordPanel />
-      </div>
     </>
   );
 }
@@ -189,16 +175,35 @@ function MyStats({ playerId, name }: { playerId: number; name: string }) {
   return <PlayerStats p={data} />;
 }
 
-function PhotoPanel({ me }: { me: Extract<AccountMe, { status: "active" }> }) {
-  const input = useRef<HTMLInputElement>(null);
+const ICON = "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-slate-300 hover:border-amber-300/50 hover:text-amber-200";
+const LINK = "text-sm text-slate-400 hover:text-amber-200 disabled:opacity-50";
+
+const Pencil = () => (
+  <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M13.5 3.5l3 3L7 16l-4 1 1-4 9.5-9.5z" />
+  </svg>
+);
+const Camera = () => (
+  <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M3 7h3l1.5-2h5L14 7h3v9H3V7z" />
+    <circle cx="10" cy="11.5" r="2.7" />
+  </svg>
+);
+
+/** Шапка кабинета: фото (нажатие — заменить), ник с карандашом, смена пароля, выход */
+function ProfileHead({ me }: { me: Extract<AccountMe, { status: "active" }> }) {
+  const file = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [nick, setNick] = useState<string | null>(null); // не null — ник правят
+  const [passOpen, setPassOpen] = useState(false);
 
-  async function run(body: () => Promise<Record<string, unknown>>) {
+  async function run(body: () => Promise<Record<string, unknown>>, after?: () => void) {
     setBusy(true);
     try {
-      setError(await accountAction(await body()));
-      refreshPhotos();
+      const err = await accountAction(await body());
+      setError(err);
+      if (!err) after?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не получилось");
     }
@@ -206,64 +211,83 @@ function PhotoPanel({ me }: { me: Extract<AccountMe, { status: "active" }> }) {
   }
 
   return (
-    <Panel title="Фото">
-      <div className="flex items-center gap-4">
-        <Avatar id={me.playerId} name={me.name} version={me.photo} className="h-16 w-16 border border-white/15 text-2xl text-amber-200" />
-        <div className="flex flex-wrap gap-2">
-          <input
-            ref={input}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              e.target.value = "";
-              if (file) run(async () => ({ action: "photo", data: await fileToJpeg(file) }));
-            }}
-          />
-          <button type="button" disabled={busy} onClick={() => input.current?.click()} className={`rounded-xl px-4 py-2 text-sm ${GOLD} disabled:opacity-60`}>
-            {busy ? "Секунду…" : me.photo ? "Заменить фото" : "Загрузить фото"}
-          </button>
-          {me.photo && (
-            <button type="button" disabled={busy} onClick={() => run(async () => ({ action: "removePhoto" }))} className={`rounded-xl px-4 py-2 text-sm ${OUTLINE}`}>
-              Убрать
-            </button>
-          )}
-        </div>
-      </div>
-      <p className="mt-2 text-xs text-slate-500">Фото видно всем на сайте: в рейтинге и итогах турниров. Без фото показывается первая буква ника.</p>
-      <ErrorLine text={error} />
-    </Panel>
-  );
-}
-
-function NickPanel({ name }: { name: string }) {
-  const [value, setValue] = useState(name);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError(await accountAction({ action: "rename", name: value }));
-    setBusy(false);
-  }
-
-  return (
-    <Panel title="Ник">
-      <form onSubmit={submit} className="flex gap-2">
-        <input className={INPUT} value={value} onChange={(e) => setValue(e.target.value)} maxLength={60} required />
-        <button type="submit" disabled={busy || value.trim() === name} className={`shrink-0 rounded-xl px-4 py-2 text-sm ${GOLD} disabled:opacity-50`}>
-          Сохранить
+    <div className="mb-5">
+      <div className="flex flex-wrap items-center gap-4">
+        <input
+          ref={file}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const picked = e.target.files?.[0];
+            e.target.value = "";
+            if (picked) run(async () => ({ action: "photo", data: await fileToJpeg(picked) }), refreshPhotos);
+          }}
+        />
+        <button type="button" disabled={busy} onClick={() => file.current?.click()} className="relative shrink-0" title={me.photo ? "Заменить фото" : "Загрузить фото"}>
+          <Avatar id={me.playerId} name={me.name} version={me.photo} className="h-20 w-20 border-2 border-amber-300/70 text-4xl text-amber-200 sm:h-24 sm:w-24" />
+          <span className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border border-amber-300/60 bg-[#0b131c] text-amber-200">
+            <Camera />
+          </span>
         </button>
-      </form>
-      <p className="mt-2 text-xs text-slate-500">Под этим именем вы показаны на сайте и на табло в клубе.</p>
+
+        <div className="min-w-0 flex-1">
+          {nick == null ? (
+            <div className="flex items-center gap-2">
+              <h1 className="truncate text-3xl font-black tracking-tight sm:text-4xl">{me.name}</h1>
+              <button type="button" onClick={() => setNick(me.name)} className={ICON} title="Изменить ник" aria-label="Изменить ник">
+                <Pencil />
+              </button>
+            </div>
+          ) : (
+            <form
+              className="flex flex-wrap gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                run(async () => ({ action: "rename", name: nick }), () => setNick(null));
+              }}
+            >
+              <input className={`${INPUT} max-w-xs`} value={nick} onChange={(e) => setNick(e.target.value)} maxLength={60} autoFocus required aria-label="Ник" />
+              <button type="submit" disabled={busy || nick.trim() === me.name} className={`rounded-xl px-4 py-2 text-sm ${GOLD} disabled:opacity-50`}>
+                Сохранить
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setNick(null);
+                  setError("");
+                }}
+                className={`rounded-xl px-4 py-2 text-sm ${OUTLINE}`}
+              >
+                Отмена
+              </button>
+            </form>
+          )}
+          <p className="mt-1 text-sm text-slate-400">{me.phone} · телефон виден только вам и клубу</p>
+          <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
+            <button type="button" onClick={() => setPassOpen(!passOpen)} className={LINK}>
+              Сменить пароль
+            </button>
+            {me.photo && (
+              <button type="button" disabled={busy} onClick={() => run(async () => ({ action: "removePhoto" }), refreshPhotos)} className={LINK}>
+                Убрать фото
+              </button>
+            )}
+          </div>
+        </div>
+        <Logout />
+      </div>
       <ErrorLine text={error} />
-    </Panel>
+      {passOpen && (
+        <div className="mt-4 max-w-md">
+          <PasswordPanel onClose={() => setPassOpen(false)} />
+        </div>
+      )}
+    </div>
   );
 }
 
-function PasswordPanel() {
+function PasswordPanel({ onClose }: { onClose: () => void }) {
   const [old, setOld] = useState("");
   const [next, setNext] = useState("");
   const [busy, setBusy] = useState(false);
@@ -285,7 +309,7 @@ function PasswordPanel() {
   }
 
   return (
-    <Panel title="Пароль">
+    <Panel title="Смена пароля">
       <form onSubmit={submit} className="space-y-3">
         <Label text="Текущий пароль">
           <input className={INPUT} type="password" autoComplete="current-password" value={old} onChange={(e) => setOld(e.target.value)} required />
@@ -295,9 +319,15 @@ function PasswordPanel() {
         </Label>
         <ErrorLine text={error} />
         {done && <div className="text-sm text-emerald-300">Пароль изменён. На других устройствах нужно войти заново.</div>}
-        <button type="submit" disabled={busy} className={`rounded-xl px-4 py-2 text-sm ${OUTLINE} disabled:opacity-60`}>
-          Сменить пароль
-        </button>
+        <div className="flex gap-2">
+          <button type="submit" disabled={busy} className={`rounded-xl px-4 py-2 text-sm ${GOLD} disabled:opacity-60`}>
+            Сменить пароль
+          </button>
+          <button type="button" onClick={onClose} className={`rounded-xl px-4 py-2 text-sm ${OUTLINE}`}>
+            {done ? "Закрыть" : "Отмена"}
+          </button>
+        </div>
+        <p className="text-xs text-slate-500">Забыли текущий пароль? Его сбросит администратор клуба.</p>
       </form>
     </Panel>
   );
