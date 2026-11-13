@@ -2,11 +2,12 @@
 
 // Личный кабинет игрока (docs/SITE.md, шаг 3): вход и заявка, а после подтверждения — фото, ник, пароль и всё про финал.
 
-import Link from "next/link";
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { finalZoneText, PASSWORD_MIN, type AccountMe } from "@/lib/account";
+import type { SitePlayer } from "@/lib/site";
 import { Avatar, fileToJpeg, refreshPhotos } from "./Avatar";
-import { GOLD, Muted, OUTLINE, PageTitle, Panel, SiteShell } from "./SiteShell";
+import { PlayerStats } from "./PlayerStats";
+import { GOLD, Muted, OUTLINE, PageTitle, Panel, SiteShell, useSite } from "./SiteShell";
 import { accountAction, useMe } from "./useMe";
 
 const INPUT = "w-full rounded-lg border border-white/10 bg-[#0b131c] px-3 py-2.5 text-base text-slate-100 outline-none focus:border-amber-300/60";
@@ -148,12 +149,11 @@ function Profile({ me }: { me: Extract<AccountMe, { status: "active" }> }) {
         </section>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Путь в финал" className="self-start">
+        <Panel title="Путь в финал" className="mb-6">
           {me.zones.length === 0 ? (
             <Muted>Сейчас рейтинг не идёт.</Muted>
           ) : (
-            <div className="space-y-3">
+            <div className="grid gap-3 md:grid-cols-3">
               {me.zones.map(({ label, zone }) => (
                 <div key={label} className={`rounded-xl border p-3 ${zone.state === "in" ? "border-emerald-400/40 bg-emerald-400/[0.07]" : "border-white/[0.08] bg-white/[0.03]"}`}>
                   <div className="flex items-baseline justify-between gap-3">
@@ -165,19 +165,28 @@ function Profile({ me }: { me: Extract<AccountMe, { status: "active" }> }) {
               ))}
             </div>
           )}
-          <Link href={`/players/${me.playerId}`} className="mt-4 inline-block text-sm text-slate-400 hover:text-amber-200">
-            Моя статистика и история турниров →
-          </Link>
         </Panel>
 
-        <div className="space-y-4">
-          <PhotoPanel me={me} />
-          <NickPanel key={me.name} name={me.name} />
-          <PasswordPanel />
-        </div>
+
+      <h2 className="mb-4 text-2xl font-black tracking-tight sm:text-3xl">Моя статистика</h2>
+      <MyStats playerId={me.playerId} name={me.name} />
+
+      <h2 className="mb-4 mt-8 text-2xl font-black tracking-tight sm:text-3xl">Настройки</h2>
+      <div className="grid items-start gap-4 lg:grid-cols-3">
+        <PhotoPanel me={me} />
+        <NickPanel key={me.name} name={me.name} />
+        <PasswordPanel />
       </div>
     </>
   );
+}
+
+/** Те же цифры и история турниров, что видны всем на странице игрока. name — чтобы после смены ника перечитать. */
+function MyStats({ playerId, name }: { playerId: number; name: string }) {
+  const { data, error, loading } = useSite<SitePlayer>(`player&id=${playerId}&n=${encodeURIComponent(name)}`);
+  if (loading) return <Muted>Загрузка…</Muted>;
+  if (!data) return <Muted>{error || "Не удалось загрузить"}</Muted>;
+  return <PlayerStats p={data} />;
 }
 
 function PhotoPanel({ me }: { me: Extract<AccountMe, { status: "active" }> }) {
