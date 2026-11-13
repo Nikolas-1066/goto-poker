@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pickSeat, playerStack, sanitizeSeating, seatingHint, shortChips, type SeatedPlayer } from "./seating";
+import { hintText, pickSeat, playerStack, playersCount, sanitizeSeating, seatingHint, shortChips } from "./seating";
 
 const seats = (table: number, ...nos: number[]) => nos.map((seatNo) => ({ tableNo: table, seatNo }));
 
@@ -8,6 +8,19 @@ describe("автопосадка", () => {
     expect(pickSeat([], 10, () => 0)).toEqual({ tableNo: 1, seatNo: 1 });
     expect(pickSeat(seats(1, 1, 2, 3, 4, 5, 6, 7, 8, 9), 9, () => 0)).toEqual({ tableNo: 2, seatNo: 1 });
     expect(pickSeat(seats(1, 1, 2, 3, 4, 5, 6, 7, 8, 9), 10, () => 0)).toEqual({ tableNo: 1, seatNo: 10 });
+  });
+
+  it("открыто несколько столов — за тот, где меньше людей; все открытые полные — следующий", () => {
+    // стол 1: 10, стол 2: 6 → за стол 2
+    expect(pickSeat([...seats(1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10), ...seats(2, 1, 2, 3, 4, 5, 6)], 10, () => 0)).toEqual({ tableNo: 2, seatNo: 7 });
+    // стол 1: 5, стол 2: 6 → за стол 1 (не «первый, где есть место», а где меньше)
+    expect(pickSeat([...seats(1, 1, 2, 3, 4, 5), ...seats(2, 1, 2, 3, 4, 5, 6)], 10, () => 0)).toEqual({ tableNo: 1, seatNo: 6 });
+    // поровну — с меньшим номером
+    expect(pickSeat([...seats(1, 2, 3), ...seats(2, 1, 4)], 10, () => 0)).toEqual({ tableNo: 1, seatNo: 1 });
+    // открыты столы 1 и 2, оба полные (лимит 3) — открывается стол 3
+    expect(pickSeat([...seats(1, 1, 2, 3), ...seats(2, 1, 2, 3)], 3, () => 0)).toEqual({ tableNo: 3, seatNo: 1 });
+    // стол 1 закрыли, играют за столом 2 — новые туда же, пока есть место
+    expect(pickSeat(seats(2, 1, 2), 10, () => 0)).toEqual({ tableNo: 2, seatNo: 3 });
   });
 
   it("место — случайное из свободных", () => {
@@ -55,46 +68,60 @@ describe("стек игрока", () => {
 });
 
 describe("подсказки рассадки", () => {
-  let id = 0;
-  const at = (table: number, ...nos: number[]): SeatedPlayer[] => nos.map((seatNo) => ({ id: ++id, name: `И${id}`, tableNo: table, seatNo }));
+  // за столом t — n человек
+  const at = (...counts: [number, number][]) => counts.flatMap(([t, n]) => Array.from({ length: n }, () => ({ tableNo: t })));
 
   it("ровно — подсказки нет; один стол — тоже", () => {
-    expect(seatingHint([...at(1, 1, 2, 3), ...at(2, 1, 2)], 4)).toBeNull(); // 5 человек за 4-местными — нужно 2 стола
-    expect(seatingHint(at(1, 1, 2, 3), 10)).toBeNull();
+    expect(seatingHint(at([1, 3], [2, 2]), 4)).toBeNull(); // 5 человек за 4-местными — нужно 2 стола
+    expect(seatingHint(at([1, 3]), 10)).toBeNull();
+    expect(seatingHint(at([1, 7], [2, 6], [3, 6]), 9)).toBeNull();
   });
 
-  it("разница 2 и больше — пересадить с последнего места полного стола на свободное место пустого", () => {
-    const h = seatingHint([...at(1, 1, 2, 3, 4, 5, 6, 7, 8), ...at(2, 1, 2, 3, 5, 6, 7)], 9)!;
-    // 8 и 6 → один игрок со стола 1, место 8 → стол 2, место 4
-    expect(h.kind).toBe("balance");
-    expect(h.moves.map((m) => [m.from, m.to])).toEqual([[{ tableNo: 1, seatNo: 8 }, { tableNo: 2, seatNo: 4 }]]);
+  it("стол 1 заполнен, пришедший сел за стол 2 — пересадите 4 игрока со стола 1 за стол 2", () => {
+    const h = seatingHint(at([1, 10], [2, 1]), 10)!;
+    expect(h).toEqual({ kind: "balance", moves: [{ from: 1, to: 2, count: 4 }] }); // 10 и 1 → 6 и 5
+    expect(hintText(h)).toBe("пересадите со стола 1 за стол 2 — 4 игрока");
   });
 
-  it("после заполнения «стол 1, потом стол 2» — выровнять за несколько пересадок", () => {
-    const h = seatingHint([...at(1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10), ...at(2, 1, 2)], 10)!;
-    expect(h.kind).toBe("balance");
-    expect(h.moves).toHaveLength(4); // 10 и 2 → 6 и 6
-    expect(h.moves.map((m) => m.from.seatNo)).toEqual([10, 9, 8, 7]);
-    expect(h.moves.map((m) => m.to.seatNo)).toEqual([3, 4, 5, 6]);
+  it("разница 2 — один игрок; лишний остаётся там, где людей больше", () => {
+    expect(seatingHint(at([1, 6], [2, 8]), 9)).toEqual({ kind: "balance", moves: [{ from: 2, to: 1, count: 1 }] });
   });
 
-  it("все помещаются за меньшим числом столов — закрыть самый пустой", () => {
-    // 6 + 3 + 3 = 12 при лимите 10 → нужно 2 стола; закрываем стол 3 (самый пустой, при равенстве — с большим номером)
-    const h = seatingHint([...at(1, 1, 2, 3, 4, 5, 6), ...at(2, 2, 4, 6), ...at(3, 1, 5, 9)], 10)!;
-    expect(h.kind).toBe("close");
-    if (h.kind !== "close") return;
-    expect(h.tableNo).toBe(3);
-    // по одному к самому пустому: стол 2 (3 чел.) → места 1, 3, потом снова стол 2 (5) vs стол 1 (6)
-    expect(h.moves.map((m) => [m.from.seatNo, m.to.tableNo, m.to.seatNo])).toEqual([
-      [1, 2, 1],
-      [5, 2, 3],
-      [9, 2, 5],
-    ]);
+  it("три стола: с двух полных за один пустой", () => {
+    // 9 + 9 + 3 = 21 → 7, 7, 7
+    expect(seatingHint(at([1, 9], [2, 9], [3, 3]), 9)).toEqual({
+      kind: "balance",
+      moves: [
+        { from: 1, to: 3, count: 2 },
+        { from: 2, to: 3, count: 2 },
+      ],
+    });
+  });
+
+  it("все помещаются за меньшим числом столов — закрыть самый пустой и раздать поровну", () => {
+    // 6 + 3 + 3 = 12 при лимите 10 → нужно 2 стола; закрываем стол 3 (при равенстве — с большим номером) → 6 и 6
+    const h = seatingHint(at([1, 6], [2, 3], [3, 3]), 10)!;
+    expect(h).toEqual({ kind: "close", tableNo: 3, moves: [{ from: 3, to: 2, count: 3 }] });
+    expect(hintText(h)).toBe("можно закрыть стол 3: пересадите со стола 3 за стол 2 — 3 игрока");
+  });
+
+  it("закрыть стол — люди расходятся за оба оставшихся", () => {
+    // 5 + 5 + 4 = 14 при лимите 9 → 2 стола; закрыть 3 → 7 и 7
+    expect(seatingHint(at([1, 5], [2, 5], [3, 4]), 9)).toEqual({
+      kind: "close",
+      tableNo: 3,
+      moves: [
+        { from: 3, to: 1, count: 2 },
+        { from: 3, to: 2, count: 2 },
+      ],
+    });
   });
 
   it("два стола, все помещаются за одним — закрыть второй", () => {
-    const h = seatingHint([...at(1, 1, 2, 3, 4), ...at(2, 1, 2, 3, 4)], 9)!;
-    expect(h).toMatchObject({ kind: "close", tableNo: 2 });
-    expect(h.moves.map((m) => m.to.seatNo)).toEqual([5, 6, 7, 8]);
+    expect(seatingHint(at([1, 4], [2, 4]), 9)).toEqual({ kind: "close", tableNo: 2, moves: [{ from: 2, to: 1, count: 4 }] });
+  });
+
+  it("склонение: 1 игрок, 3 игрока, 5 игроков, 11 игроков", () => {
+    expect([1, 3, 5, 11, 21, 22].map(playersCount)).toEqual(["1 игрок", "3 игрока", "5 игроков", "11 игроков", "21 игрок", "22 игрока"]);
   });
 });

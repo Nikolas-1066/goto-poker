@@ -9,6 +9,7 @@ import type { ParticipantView, PlayerAction } from "@/lib/db/tournament";
 import {
   MAX_SEATS,
   MAX_TABLES,
+  playersCount,
   seatingHint,
   shortChips,
   type SeatingHint,
@@ -20,8 +21,6 @@ type Props = {
   /** Все участники, кроме вылетевших (записавшиеся с местом тоже видны за столом) */
   people: ParticipantView[];
   seating: SeatingSettings;
-  /** Турнир идёт (после старта) — показываем подсказки по пересадке */
-  started: boolean;
   addonOpen: boolean;
   canBust: boolean;
   busy: boolean;
@@ -35,7 +34,7 @@ type Props = {
 
 const plural = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? "игрок" : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? "игрока" : "игроков");
 
-export function TablesView({ people, seating, started, addonOpen, canBust, busy, act, onBust, onEnter, cashPanel, onToggleCash }: Props) {
+export function TablesView({ people, seating, addonOpen, canBust, busy, act, onBust, onEnter, cashPanel, onToggleCash }: Props) {
   const seated = people.filter((p) => p.tableNo != null && p.seatNo != null);
   const playingSeated = seated.filter((p) => p.status === "playing");
   const unseated = people.filter((p) => p.status === "playing" && (p.tableNo == null || p.seatNo == null));
@@ -47,12 +46,11 @@ export function TablesView({ people, seating, started, addonOpen, canBust, busy,
   /** Пересадка: выбран игрок — следующим нажатием на свободное место (на любом столе) */
   const [moving, setMoving] = useState<number | null>(null);
 
-  const hint: SeatingHint | null = started
-    ? seatingHint(
-        playingSeated.map((p) => ({ id: p.id, name: p.name, tableNo: p.tableNo!, seatNo: p.seatNo! })),
-        seating.seatsPerTable,
-      )
-    : null;
+  // подсказка — и до старта: стол 1 заполнен, пришедшего посадили за стол 2 → «пересадите N за стол 2»
+  const hint: SeatingHint | null = seatingHint(
+    playingSeated.map((p) => ({ tableNo: p.tableNo! })),
+    seating.seatsPerTable,
+  );
 
   const sel = people.find((p) => p.id === selected) ?? null;
   const mover = people.find((p) => p.id === moving) ?? null;
@@ -67,7 +65,7 @@ export function TablesView({ people, seating, started, addonOpen, canBust, busy,
 
   return (
     <div className="space-y-3">
-      {hint && <HintBox hint={hint} busy={busy} onApply={() => act({ type: "seatMany", moves: hint.moves.map((m) => ({ participantId: m.participantId, ...m.to })) })} />}
+      {hint && <HintBox hint={hint} />}
 
       {unseated.length > 0 && (
         <div className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-2 text-sm">
@@ -161,23 +159,21 @@ export function TablesView({ people, seating, started, addonOpen, canBust, busy,
   );
 }
 
-/** Подсказка «Закройте стол» / «Пересадите» со списком пересадок и кнопкой */
-function HintBox({ hint, busy, onApply }: { hint: SeatingHint; busy: boolean; onApply: () => void }) {
+/** Подсказка «Закройте стол» / «Пересадите»: сколько игроков с какого стола за какой. Кого — решает админ. */
+function HintBox({ hint }: { hint: SeatingHint }) {
   return (
     <div className="rounded-lg border border-amber-300/40 bg-amber-300/[0.08] p-3 text-sm text-amber-100">
       <div className="font-bold text-amber-300">
-        {hint.kind === "close" ? `Можно закрыть стол ${hint.tableNo}` : "За столами неровно — пересадите"}
+        {hint.kind === "close" ? `Можно закрыть стол ${hint.tableNo} — пересадите:` : "За столами неровно — пересадите:"}
       </div>
       <ul className="mt-1 space-y-0.5">
         {hint.moves.map((m) => (
-          <li key={m.participantId} className="tabular-nums">
-            {m.name}: стол {m.from.tableNo} место {m.from.seatNo} → <b>стол {m.to.tableNo} место {m.to.seatNo}</b>
+          <li key={`${m.from}-${m.to}`} className="tabular-nums">
+            со стола {m.from} за стол {m.to} — <b>{playersCount(m.count)}</b>
           </li>
         ))}
       </ul>
-      <Button variant="primary" className="mt-2 w-full sm:w-auto" disabled={busy} onClick={onApply}>
-        {hint.kind === "close" ? `Пересадить всех и закрыть стол ${hint.tableNo}` : hint.moves.length > 1 ? `Пересадить (${hint.moves.length})` : "Пересадить"}
-      </Button>
+      <div className="mt-1 text-xs text-amber-100/60">Нажмите на игрока → «Пересадить» → свободное место.</div>
     </div>
   );
 }

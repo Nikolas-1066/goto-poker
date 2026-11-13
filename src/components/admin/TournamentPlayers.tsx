@@ -460,7 +460,6 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
               <TablesView
                 people={participants.filter((p) => p.status !== "busted")}
                 seating={seating}
-                started={tournament.status !== "idle"}
                 addonOpen={addonOpen}
                 canBust={playing.length > 1}
                 busy={busy}

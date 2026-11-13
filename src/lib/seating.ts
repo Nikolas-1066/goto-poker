@@ -1,8 +1,9 @@
 // Рассадка за столами — чистые функции, общие для сервера и админки в браузере (без кода базы).
 // Столов в клубе до 3, мест за столом до 10; сколько мест занимать за столом — настройка клуба.
-// Автопосадка: первый стол, где есть место до лимита, случайное свободное место (стол 1 → 2 → 3).
-// Подсказки после старта: «Закройте стол N» (все помещаются за меньшим числом столов)
-// и «Пересадите» (разница между столами 2 человека и больше). Пересаживают только по кнопке.
+// Автопосадка: сначала стол 1 до лимита; когда открыто несколько столов — за тот, где меньше людей;
+// все открытые заполнены — открывается следующий стол. Место — случайное свободное.
+// Подсказки: «Закройте стол N» (все помещаются за меньшим числом столов) и «Пересадите» (разница
+// между столами 2 человека и больше) — только сколько игроков с какого стола за какой, кого — решает админ.
 
 export const MAX_TABLES = 3;
 export const MAX_SEATS = 10;
@@ -40,20 +41,21 @@ export function sanitizeSeating(input: unknown, base: SeatingSettings = DEFAULT_
 export type Seat = { tableNo: number; seatNo: number };
 
 /**
- * Место для нового игрока: первый стол (1, 2, 3), где людей меньше лимита, и случайное
- * свободное место на нём (из 1…лимит). null — все столы заполнены.
+ * Место для нового игрока. Открытые столы — где уже кто-то сидит. Из открытых, где есть место до лимита, —
+ * тот, где меньше людей (при равенстве — с меньшим номером). Все открытые заполнены (или открытых нет) —
+ * первый неоткрытый стол. Место — случайное свободное из 1…лимит. null — все столы заполнены.
  */
 export function pickSeat(occupied: Seat[], seatsPerTable: number, random: () => number = Math.random): Seat | null {
-  for (let table = 1; table <= MAX_TABLES; table++) {
-    const here = occupied.filter((s) => s.tableNo === table);
-    if (here.length >= seatsPerTable) continue;
-    const taken = new Set(here.map((s) => s.seatNo));
-    const free: number[] = [];
-    for (let seat = 1; seat <= seatsPerTable; seat++) if (!taken.has(seat)) free.push(seat);
-    if (!free.length) continue;
-    return { tableNo: table, seatNo: free[Math.min(free.length - 1, Math.floor(random() * free.length))] };
-  }
-  return null;
+  const count = (t: number) => occupied.filter((s) => s.tableNo === t).length;
+  const tables = Array.from({ length: MAX_TABLES }, (_, i) => i + 1);
+  const open = tables.filter((t) => count(t) > 0 && count(t) < seatsPerTable).sort((a, b) => count(a) - count(b) || a - b);
+  const table = open[0] ?? tables.find((t) => count(t) === 0);
+  if (table == null) return null;
+  const taken = new Set(occupied.filter((s) => s.tableNo === table).map((s) => s.seatNo));
+  const free: number[] = [];
+  for (let seat = 1; seat <= seatsPerTable; seat++) if (!taken.has(seat)) free.push(seat);
+  if (!free.length) return null;
+  return { tableNo: table, seatNo: free[Math.min(free.length - 1, Math.floor(random() * free.length))] };
 }
 
 // ---------- Стек ----------
@@ -94,65 +96,71 @@ export function shortChips(n: number) {
 
 // ---------- Подсказки: закрыть стол / выровнять ----------
 
-export type SeatedPlayer = { id: number; name: string; tableNo: number; seatNo: number };
-export type Move = { participantId: number; name: string; from: Seat; to: Seat };
-export type SeatingHint = { kind: "close"; tableNo: number; moves: Move[] } | { kind: "balance"; moves: Move[] };
+/** Пересадить count игроков со стола from за стол to (кого именно — решает админ) */
+export type TableMove = { from: number; to: number; count: number };
+export type SeatingHint = { kind: "close"; tableNo: number; moves: TableMove[] } | { kind: "balance"; moves: TableMove[] };
 
 /**
- * Что пересадить, когда за столами стало неровно (смотреть после старта турнира):
+ * Что пересадить, когда за столами стало неровно (по числу людей за столами):
  * 1) все помещаются за меньшим числом столов — закрыть самый пустой стол (при равенстве — с большим номером),
- *    его игроков — за другие столы, к самому пустому, на свободные места по порядку;
- * 2) иначе, если разница между столами 2 человека и больше, — пересаживать с самого полного стола
- *    (игрок с последнего места) за самый пустой, пока разница не станет меньше 2.
+ *    людей раздать на оставшиеся поровну;
+ * 2) иначе, если разница между столами 2 человека и больше, — выровнять (разница не больше 1).
+ * Поровну: каждому столу n/k, лишние по одному — тем, где людей больше (меньше пересадок).
+ * Сколько с какого стола за какой: со столов, где лишние (по номеру), за столы, где не хватает (по номеру).
  * null — всё ровно.
  */
-export function seatingHint(players: SeatedPlayer[], seatsPerTable: number): SeatingHint | null {
-  const tables = new Map<number, SeatedPlayer[]>();
-  for (const p of players) tables.set(p.tableNo, [...(tables.get(p.tableNo) ?? []), p]);
-  if (tables.size < 2) return null;
+export function seatingHint(seated: { tableNo: number }[], seatsPerTable: number): SeatingHint | null {
+  const counts = new Map<number, number>();
+  for (const p of seated) counts.set(p.tableNo, (counts.get(p.tableNo) ?? 0) + 1);
+  if (counts.size < 2) return null;
+  const n = seated.length;
+  const need = Math.max(1, Math.ceil(n / seatsPerTable));
 
-  // занятые места по столам — меняются по мере пересадки
-  const taken = new Map<number, Set<number>>([...tables].map(([t, list]) => [t, new Set(list.map((p) => p.seatNo))]));
-  const count = (t: number) => taken.get(t)!.size;
-  const freeSeat = (t: number) => {
-    for (let s = 1; s <= seatsPerTable; s++) if (!taken.get(t)!.has(s)) return s;
-    return null;
-  };
-  const move = (p: SeatedPlayer, to: number): Move | null => {
-    const seat = freeSeat(to);
-    if (seat == null) return null;
-    taken.get(p.tableNo)!.delete(p.seatNo);
-    taken.get(to)!.add(seat);
-    return { participantId: p.id, name: p.name, from: { tableNo: p.tableNo, seatNo: p.seatNo }, to: { tableNo: to, seatNo: seat } };
-  };
-  const emptiest = (except: number) =>
-    [...taken.keys()].filter((t) => t !== except && count(t) < seatsPerTable).sort((a, b) => count(a) - count(b) || a - b)[0];
+  let close: number | null = null;
+  if (counts.size > need) {
+    close = [...counts.keys()].sort((a, b) => counts.get(a)! - counts.get(b)! || b - a)[0];
+  } else {
+    const values = [...counts.values()];
+    if (Math.max(...values) - Math.min(...values) < 2) return null;
+  }
 
-  const need = Math.ceil(players.length / seatsPerTable);
-  if (tables.size > need) {
-    const close = [...tables.keys()].sort((a, b) => count(a) - count(b) || b - a)[0];
-    const moves: Move[] = [];
-    for (const p of [...tables.get(close)!].sort((a, b) => a.seatNo - b.seatNo)) {
-      const to = emptiest(close);
-      const m = to == null ? null : move(p, to);
-      if (!m) return null;
-      moves.push(m);
+  const keep = [...counts.keys()].filter((t) => t !== close);
+  const base = Math.floor(n / keep.length);
+  let extra = n % keep.length;
+  const target = new Map<number, number>();
+  for (const t of [...keep].sort((a, b) => counts.get(b)! - counts.get(a)! || a - b)) target.set(t, base + (extra-- > 0 ? 1 : 0));
+  if (close != null) target.set(close, 0);
+
+  const order = [...counts.keys()].sort((a, b) => a - b);
+  const give = order.filter((t) => counts.get(t)! > target.get(t)!).map((t) => ({ t, left: counts.get(t)! - target.get(t)! }));
+  const take = order.filter((t) => counts.get(t)! < target.get(t)!).map((t) => ({ t, left: target.get(t)! - counts.get(t)! }));
+  const moves: TableMove[] = [];
+  for (const g of give) {
+    for (const r of take) {
+      const c = Math.min(g.left, r.left);
+      if (c <= 0) continue;
+      moves.push({ from: g.t, to: r.t, count: c });
+      g.left -= c;
+      r.left -= c;
     }
-    return { kind: "close", tableNo: close, moves };
   }
+  if (!moves.length) return null;
+  return close != null ? { kind: "close", tableNo: close, moves } : { kind: "balance", moves };
+}
 
-  const moves: Move[] = [];
-  const at = new Map<number, SeatedPlayer[]>([...tables].map(([t, list]) => [t, [...list].sort((a, b) => a.seatNo - b.seatNo)]));
-  for (let guard = 0; guard < players.length; guard++) {
-    const order = [...taken.keys()].sort((a, b) => count(b) - count(a) || a - b);
-    const full = order[0];
-    const empty = order[order.length - 1];
-    if (count(full) - count(empty) < 2) break;
-    const p = at.get(full)!.sort((a, b) => a.seatNo - b.seatNo).pop()!;
-    const m = move(p, empty);
-    if (!m) break;
-    at.get(empty)!.push({ ...p, tableNo: empty, seatNo: m.to.seatNo });
-    moves.push(m);
-  }
-  return moves.length ? { kind: "balance", moves } : null;
+/** «1 игрок», «3 игрока», «5 игроков» */
+export function playersCount(n: number) {
+  const d = n % 10, h = n % 100;
+  return `${n} ${d === 1 && h !== 11 ? "игрок" : d >= 2 && d <= 4 && (h < 12 || h > 14) ? "игрока" : "игроков"}`;
+}
+
+/** «со стола 1 за стол 2 — 4 игрока» */
+export function moveText(m: TableMove) {
+  return `со стола ${m.from} за стол ${m.to} — ${playersCount(m.count)}`;
+}
+
+/** Подсказка одной фразой — для сообщения после «Пришёл» */
+export function hintText(h: SeatingHint) {
+  const list = h.moves.map(moveText).join(", ");
+  return h.kind === "close" ? `можно закрыть стол ${h.tableNo}: пересадите ${list}` : `пересадите ${list}`;
 }

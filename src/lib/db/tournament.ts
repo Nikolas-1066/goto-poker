@@ -15,7 +15,7 @@ import {
 } from "../cash";
 import { applyAction, boardView } from "../clock";
 import { phoneTail } from "../players";
-import { MAX_SEATS, MAX_TABLES, pickSeat, playerStack, type PlayerStack, type Seat } from "../seating";
+import { hintText, MAX_SEATS, MAX_TABLES, pickSeat, playerStack, seatingHint, type PlayerStack, type Seat } from "../seating";
 import {
   checkAction,
   computeResults,
@@ -407,8 +407,13 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
     setSeat(participantId, s);
     return s;
   };
-  const seatText = (s: Seat | null | undefined) =>
-    s === undefined ? "" : s ? ` · стол ${s.tableNo}, место ${s.seatNo}` : " · свободных мест за столами нет";
+  /** «· стол 2, место 1» и, если за столами стало неровно, — сколько кого пересадить */
+  const seatText = (s: Seat | null | undefined) => {
+    if (s === undefined) return "";
+    if (!s) return " · свободных мест за столами нет";
+    const hint = seatingHint(occupied(), getSeating(db).seatsPerTable);
+    return ` · стол ${s.tableNo}, место ${s.seatNo}${hint ? ` · ${hintText(hint)}` : ""}`;
+  };
   let message = "";
   let undoEventId: number | null = null;
   let seated: Seat | null | undefined;

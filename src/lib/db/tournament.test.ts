@@ -441,11 +441,12 @@ describe("автопосадка и стек (рассадка столов)", (
     Array.from({ length: n }, (_, i) => createPlayer(db, { name: `Гость ${i + 1}`, phone: `+7911000${String(i).padStart(4, "0")}` }).id);
   const seated = () => people().filter((p) => p.status === "playing" && p.tableNo != null);
 
-  it("«Пришёл» сажает за стол 1 до лимита, потом за стол 2; места не повторяются", () => {
+  it("«Пришёл» сажает за стол 1 до лимита, потом за стол 2 и подсказывает пересадку; места не повторяются", () => {
     player({ type: "setSeating", seatsPerTable: 4 });
     for (const id of [sasha, ira, oleg, ...extra(3)]) player({ type: "enter", playerId: id });
     expect(lastResult!.seat).toMatchObject({ tableNo: 2 });
-    expect(lastResult!.message).toMatch(/· стол 2, место [1-4]$/);
+    // стол 1 полный (4), за столом 2 двое — подсказка прямо в сообщении
+    expect(lastResult!.message).toMatch(/· стол 2, место [1-4] · пересадите со стола 1 за стол 2 — 1 игрок$/);
     const list = seated();
     expect(list.filter((p) => p.tableNo === 1)).toHaveLength(4);
     expect(list.filter((p) => p.tableNo === 2)).toHaveLength(2);
@@ -463,7 +464,7 @@ describe("автопосадка и стек (рассадка столов)", (
     expect(byName("Саша").tableNo).toBeNull();
     expect(lastResult!.seat).toBeUndefined();
     player({ type: "autoSeat", participantId: byName("Саша").id });
-    expect(byName("Саша").tableNo).toBe(1);
+    expect(byName("Саша").tableNo).toBe(3); // открыт только стол 3 — туда же, пока есть место
   });
 
   it("re-entry — новое место; отмена «Пришёл» освобождает место", () => {
