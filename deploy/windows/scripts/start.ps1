@@ -70,7 +70,7 @@ try {
     Stop-Kiosk
     Start-Sleep -Milliseconds 500
     $browserArgs = @(
-        '--kiosk', "http://127.0.0.1:$port/",
+        '--kiosk', "http://127.0.0.1:$port/tablo",
         "--user-data-dir=`"$BrowserDir`"",
         '--autoplay-policy=no-user-gesture-required',
         "--window-position=$x,$y",

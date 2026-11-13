@@ -9,6 +9,9 @@ const nextConfig: NextConfig = {
   // В режиме разработки разрешаем открывать сайт с телефона по IP в локальной сети
   // (иначе Next.js блокирует скрипты и страница не оживает).
   allowedDevOrigins: ["192.168.*.*", "10.*.*.*", "172.*.*.*", "*.local"],
+  // Главная страница — сайт клуба, табло — на /tablo. В пакете для ноутбука (он работает без интернета,
+  // сайт там не нужен) главная по-прежнему открывает табло: старые ярлыки и закладки продолжают работать.
+  redirects: async () => (process.env.BUILD_STANDALONE ? [{ source: "/", destination: "/tablo", permanent: false }] : []),
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

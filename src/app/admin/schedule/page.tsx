@@ -5,6 +5,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { AboutEditor } from "@/components/admin/AboutEditor";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Button, Card, Field, inputClass } from "@/components/admin/ui";
 import { formatRub } from "@/lib/cash";
@@ -164,52 +165,54 @@ function Schedule() {
           </div>
         </Card>
 
-        <Card
-          title="Постоянные дни"
-          className="self-start"
-          action={
-            <Button disabled={!presets.length} onClick={() => setEditing({ kind: "template", id: null, draft: blank() })}>
-              + День
-            </Button>
-          }
-        >
-          <p className="mb-3 text-sm text-slate-400">
-            Турниры, которые идут каждую неделю. Программа сама ставит их в расписание на 2 недели вперёд — отдельный турнир можно поправить или отменить.
-          </p>
-          {form("template", null)}
-          {data.templates.length === 0 && !editing && <div className="py-3 text-center text-sm text-slate-500">Постоянных дней пока нет.</div>}
-          <div className="divide-y divide-white/[0.06]">
-            {data.templates.map((t) =>
-              editing?.kind === "template" && editing.id === t.id ? (
-                <div key={t.id} className="py-3">
-                  {form("template", t.id)}
-                </div>
-              ) : (
-                <div key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-3">
-                  <div className="min-w-0 flex-1 basis-48">
-                    <div className="font-semibold">{t.name}</div>
-                    <div className="text-sm text-slate-400">
-                      {templateLabel(t)} · {presetOf(t.presetId)?.name ?? "структура удалена"}
-                      {t.seatLimit != null && ` · до ${t.seatLimit} мест`}
-                    </div>
+        <div className="space-y-4 self-start">
+          <Card
+            title="Постоянные дни"
+            action={
+              <Button disabled={!presets.length} onClick={() => setEditing({ kind: "template", id: null, draft: blank() })}>
+                + День
+              </Button>
+            }
+          >
+            <p className="mb-3 text-sm text-slate-400">
+              Турниры, которые идут каждую неделю. Программа сама ставит их в расписание на 2 недели вперёд — отдельный турнир можно поправить или отменить.
+            </p>
+            {form("template", null)}
+            {data.templates.length === 0 && !editing && <div className="py-3 text-center text-sm text-slate-500">Постоянных дней пока нет.</div>}
+            <div className="divide-y divide-white/[0.06]">
+              {data.templates.map((t) =>
+                editing?.kind === "template" && editing.id === t.id ? (
+                  <div key={t.id} className="py-3">
+                    {form("template", t.id)}
                   </div>
-                  <Button variant="ghost" disabled={busy} onClick={() => setEditing({ kind: "template", id: t.id, draft: draftOf(t) })}>
-                    Изменить
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    disabled={busy}
-                    onClick={() =>
-                      act({ type: "deleteTemplate", id: t.id }, `Убрать «${t.name}» (${templateLabel(t).toLowerCase()})? Его будущие турниры пропадут из расписания.`)
-                    }
-                  >
-                    Убрать
-                  </Button>
-                </div>
-              ),
-            )}
-          </div>
-        </Card>
+                ) : (
+                  <div key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-3">
+                    <div className="min-w-0 flex-1 basis-48">
+                      <div className="font-semibold">{t.name}</div>
+                      <div className="text-sm text-slate-400">
+                        {templateLabel(t)} · {presetOf(t.presetId)?.name ?? "структура удалена"}
+                        {t.seatLimit != null && ` · до ${t.seatLimit} мест`}
+                      </div>
+                    </div>
+                    <Button variant="ghost" disabled={busy} onClick={() => setEditing({ kind: "template", id: t.id, draft: draftOf(t) })}>
+                      Изменить
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() =>
+                        act({ type: "deleteTemplate", id: t.id }, `Убрать «${t.name}» (${templateLabel(t).toLowerCase()})? Его будущие турниры пропадут из расписания.`)
+                      }
+                    >
+                      Убрать
+                    </Button>
+                  </div>
+                ),
+              )}
+            </div>
+          </Card>
+          <AboutEditor />
+        </div>
       </div>
     </div>
   );

@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "ГОТО ПОКЕР",
-  description: "Табло и управление турнирами клуба спортивного покера ГОТО",
+  description: "Клуб спортивного покера ГОТО ПОКЕР, Воронеж: расписание турниров, рейтинг игроков и итоги.",
   appleWebApp: { capable: true, title: "ГОТО ПОКЕР", statusBarStyle: "black" },
 };
 

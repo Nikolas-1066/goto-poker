@@ -74,7 +74,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
           </div>
           <div className="flex shrink-0 items-center gap-1 md:gap-2">
             <a
-              href="/"
+              href="/tablo"
               target="_blank"
               rel="noreferrer"
               title="Табло"
