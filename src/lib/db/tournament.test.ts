@@ -394,6 +394,8 @@ describe("отмена", () => {
 
 describe("рассадка", () => {
   beforeEach(() => {
+    // без автопосадки: иначе «Пришёл» даёт случайное место, и оно иногда совпадает с местом из теста
+    player({ type: "setSeating", autoSeat: false });
     player({ type: "enter", playerId: sasha });
     player({ type: "enter", playerId: ira });
     player({ type: "register", playerId: oleg });
