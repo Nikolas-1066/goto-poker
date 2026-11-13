@@ -3,7 +3,7 @@
 // Личный кабинет игрока (docs/SITE.md, шаг 3): вход и заявка, а после подтверждения — фото, ник, пароль и всё про финал.
 
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
-import { finalZoneText, PASSWORD_MIN, type AccountMe } from "@/lib/account";
+import { finalProgress, PASSWORD_MIN, type AccountMe } from "@/lib/account";
 import type { SitePlayer } from "@/lib/site";
 import { Avatar, fileToJpeg, refreshPhotos } from "./Avatar";
 import { PlayerStats } from "./PlayerStats";
@@ -142,23 +142,7 @@ function Profile({ me }: { me: Extract<AccountMe, { status: "active" }> }) {
         </section>
       )}
 
-        <Panel title="Путь в финал" className="mb-6">
-          {me.zones.length === 0 ? (
-            <Muted>Сейчас рейтинг не идёт.</Muted>
-          ) : (
-            <div className="grid gap-3 md:grid-cols-3">
-              {me.zones.map(({ label, zone }) => (
-                <div key={label} className={`rounded-xl border p-3 ${zone.state === "in" ? "border-emerald-400/40 bg-emerald-400/[0.07]" : "border-white/[0.08] bg-white/[0.03]"}`}>
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="font-bold">{label}</span>
-                    {zone.state !== "none" && <span className="shrink-0 font-bold tabular-nums text-amber-200">{zone.points.toLocaleString("ru-RU")} оч.</span>}
-                  </div>
-                  <div className={`mt-1 text-sm ${zone.state === "in" ? "text-emerald-200" : "text-slate-300"}`}>{finalZoneText(zone)}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </Panel>
+      <FinalPath zones={me.zones} />
 
 
       <h2 className="mb-4 text-2xl font-black tracking-tight sm:text-3xl">Моя статистика</h2>
@@ -173,6 +157,44 @@ function MyStats({ playerId, name }: { playerId: number; name: string }) {
   if (loading) return <Muted>Загрузка…</Muted>;
   if (!data) return <Muted>{error || "Не удалось загрузить"}</Muted>;
   return <PlayerStats p={data} />;
+}
+
+/** Путь в финал месяца: полоса — сколько очков набрано из тех, что нужны для зоны финала */
+function FinalPath({ zones }: { zones: Extract<AccountMe, { status: "active" }>["zones"] }) {
+  const month = zones[0];
+  if (!month) return null;
+  const { zone } = month;
+  const bar = finalProgress(zone);
+  const inZone = zone.state === "in";
+  return (
+    <Panel title={`Путь в финал · ${month.label.replace(/^[^·]+· /, "")}`} className="mb-6">
+      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
+        <div className={`text-lg font-bold sm:text-xl ${inZone ? "text-emerald-300" : ""}`}>
+          {zone.state === "none" ? "Вы ещё не играли в этом месяце" : inZone ? `Вы в зоне финала — ${zone.rank} место` : `Сейчас ${zone.rank} место`}
+        </div>
+        {bar && (
+          <div className="tabular-nums text-slate-400">
+            <b className="text-2xl font-black text-amber-200">{bar.have.toLocaleString("ru-RU")}</b>
+            {!inZone && <> из {bar.need.toLocaleString("ru-RU")}</>} оч.
+          </div>
+        )}
+      </div>
+      <div className="mt-3 h-3 overflow-hidden rounded-full bg-white/[0.07]" role="progressbar" aria-valuenow={bar?.percent ?? 0} aria-valuemin={0} aria-valuemax={100}>
+        <div
+          className={`h-full rounded-full ${inZone ? "bg-gradient-to-r from-emerald-400 to-emerald-300" : "bg-gradient-to-r from-amber-400 to-amber-200"}`}
+          style={{ width: `${bar?.percent ?? 0}%` }}
+        />
+      </div>
+      <p className="mt-2 text-sm text-slate-400">
+        {zone.state === "none" && "Сыграйте турнир — и появитесь в рейтинге месяца."}
+        {zone.state === "in" && `В финал выходят первые ${zone.zone}. Держите место до конца месяца.`}
+        {zone.state === "out" &&
+          (zone.gap > 0
+            ? `В финал выходят первые ${zone.zone}. Чтобы войти в их число сейчас, нужно набрать ещё минимум ${zone.gap} оч.`
+            : `В финал выходят первые ${zone.zone}. У вас столько же очков, сколько у ${zone.zone}-го места, — осталось его обойти.`)}
+      </p>
+    </Panel>
+  );
 }
 
 const ICON = "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-slate-300 hover:border-amber-300/50 hover:text-amber-200";

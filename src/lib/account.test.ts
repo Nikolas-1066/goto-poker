@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { finalZone, finalZoneText, isJpeg, validateRegistration } from "./account";
+import { finalProgress, finalZone, finalZoneText, isJpeg, validateRegistration } from "./account";
 
 describe("заявка на вход", () => {
   it("телефон приводится к одному виду, имя чистится", () => {
@@ -28,6 +28,12 @@ describe("зона финала", () => {
     expect(finalZone(rows, 3, 2)).toEqual({ state: "out", rank: 3, zone: 2, points: 45, gap: 35 });
     expect(finalZone(rows, 4, 3)).toEqual({ state: "out", rank: 4, zone: 3, points: 45, gap: 0 });
     expect(finalZone(rows, 9, 2)).toEqual({ state: "none" });
+  });
+  it("полоса прогресса: сколько есть и сколько нужно", () => {
+    expect(finalProgress(finalZone(rows, 3, 2))).toEqual({ have: 45, need: 80, percent: 56 });
+    expect(finalProgress(finalZone(rows, 1, 2))).toEqual({ have: 100, need: 100, percent: 100 });
+    expect(finalProgress(finalZone(rows, 4, 3))).toEqual({ have: 45, need: 45, percent: 99 });
+    expect(finalProgress(finalZone(rows, 9, 2))).toBeNull();
   });
   it("текст", () => {
     expect(finalZoneText(finalZone(rows, 3, 2))).toBe("Сейчас 3 место, в финал выходят 2. До зоны финала — 35 оч.");

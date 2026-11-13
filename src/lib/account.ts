@@ -70,6 +70,15 @@ export function finalZoneText(z: FinalZone): string {
     : `Сейчас ${z.rank} место, в финал выходят ${z.zone}. Очков столько же, сколько у ${z.zone}-го места — нужно его обойти.`;
 }
 
+/** Полоса прогресса: сколько очков есть и сколько нужно, чтобы войти в зону финала. null — рисовать нечего */
+export function finalProgress(z: FinalZone): { have: number; need: number; percent: number } | null {
+  if (z.state === "none") return null;
+  const need = z.state === "in" ? z.points : z.points + z.gap;
+  // очков поровну с проходящим местом — почти полная полоса: остался один шаг
+  const percent = z.state === "in" ? 100 : need > 0 ? Math.min(z.gap > 0 ? 97 : 99, Math.round((z.points / need) * 100)) : 0;
+  return { have: z.points, need, percent };
+}
+
 // ---------- Что видит вошедший игрок ----------
 
 export type AccountMe =
@@ -83,7 +92,7 @@ export type AccountMe =
       phone: string;
       /** Версия фото (время загрузки) или null — фото нет */
       photo: number | null;
-      /** Идущие периоды: где игрок относительно зоны финала */
+      /** Идущий месяц: где игрок относительно зоны финала (пусто — месяц не идёт) */
       zones: { label: string; zone: FinalZone }[];
       /** Закрытые периоды, финал которых ещё не сыгран и куда игрок прошёл */
       finalistOf: string[];

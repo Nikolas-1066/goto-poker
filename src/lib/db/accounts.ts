@@ -18,7 +18,7 @@ import {
 import { formatPhone } from "../players";
 import { finalistsOf, listPeriods, openPeriod, PERIOD_LABEL, standingsOf, type Period } from "./periods";
 import { createPlayer, getPlayer } from "./players";
-import { getSettings, type PeriodKind } from "./settings";
+import type { PeriodKind } from "./settings";
 import { audit } from "./sqlite";
 
 /** Вход держится 30 дней */
@@ -275,12 +275,9 @@ export function accountMe(db: DatabaseSync, account: Account): AccountMe {
   const player = getPlayer(db, account.playerId);
   // игрока убрали в архив — вход остаётся, но показать нечего: как заявка
   if (!player) return { status: "pending", name: account.name, phone: formatPhone(account.phone) };
-  const settings = getSettings(db);
-  const kinds: PeriodKind[] = ["month", ...(settings.seasonEnabled ? ["season" as const] : []), ...(settings.yearEnabled ? ["year" as const] : [])];
-  const zones = kinds
-    .map((k) => openPeriod(db, k))
-    .filter((p): p is Period => p != null)
-    .map((p) => ({ label: periodLabel(p), zone: finalZone(standingsOf(db, p), player.id, p.finalistsN) }));
+  // «Путь в финал» — только по идущему месяцу (решение владельца)
+  const month = openPeriod(db, "month");
+  const zones = month ? [{ label: periodLabel(month), zone: finalZone(standingsOf(db, month), player.id, month.finalistsN) }] : [];
   const played = db.prepare("SELECT 1 FROM tournaments WHERE final_of_period_id = ? AND status = 'finished'");
   // только последний закрытый период каждого вида: старые без сыгранного финала в кабинете не висят
   const lastClosed = new Map<PeriodKind, Period>();
