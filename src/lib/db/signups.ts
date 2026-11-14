@@ -7,6 +7,8 @@ import type { Db } from "../types";
 import type { Account } from "./accounts";
 import { getItem, listSchedule } from "./schedule";
 import { audit } from "./sqlite";
+import { chatOfAccount, chatOfPlayer, enqueue } from "./telegram";
+import { promotedText } from "../telegram/texts";
 import { applyPlayerAction, currentTournament } from "./tournament";
 
 /** Запись, как её видит админ: с никами гостей и пометками */
@@ -76,6 +78,34 @@ export function siteSignups(db: DatabaseSync, item: ScheduleItem, now = Date.now
   return { going: q.going.map(pub), waiting: q.waiting.map(pub), seats: q.seats, free: q.free, open: signupOpen(item, now) };
 }
 
+/** Кто сейчас в листе ожидания (номера записей) — чтобы после изменения узнать, кто из него прошёл */
+const waitingIds = (db: DatabaseSync, item: Pick<ScheduleItem, "id" | "seatLimit">) => new Set(splitQueue(activeRows(db, item.id), item.seatLimit).waiting.map((r) => r.id));
+
+/** Место освободилось: кто был в листе ожидания, а теперь записан, — тому бот пишет «вы записаны» */
+function notifyPromoted(db: DatabaseSync, item: ScheduleItem, before: Set<number>, now: number) {
+  for (const r of splitQueue(activeRows(db, item.id), item.seatLimit).going) {
+    if (!before.has(r.id)) continue;
+    const chat = r.account_id != null ? chatOfAccount(db, r.account_id) : r.player_id != null ? chatOfPlayer(db, r.player_id) : null;
+    enqueue(db, chat, promotedText(item), { dedupe: `promoted:${r.id}` }, now);
+  }
+}
+
+/** Чаты записанных (прошедших по лимиту), у кого подключён Telegram, — для напоминания в день турнира */
+export function goingChats(db: DatabaseSync, item: Pick<ScheduleItem, "id" | "seatLimit">): { chat: number; guests: number }[] {
+  return splitQueue(activeRows(db, item.id), item.seatLimit)
+    .going.map((r) => ({ chat: r.account_id != null ? chatOfAccount(db, r.account_id) : r.player_id != null ? chatOfPlayer(db, r.player_id) : null, guests: r.guests }))
+    .filter((r): r is { chat: number; guests: number } => r.chat != null);
+}
+
+/** Снять запись игрока на турнир, из которого он убран как не пришедший (регистрация закрылась) */
+export function dropSignupOfTournament(db: DatabaseSync, tournamentId: number, playerId: number, now = Date.now()) {
+  const rows = db.prepare(`${SELECT} AND s.schedule_id IN (SELECT id FROM schedule WHERE tournament_id = ?)`).all(tournamentId) as Row[];
+  for (const r of rows.filter((x) => x.player_id === playerId)) {
+    db.prepare("UPDATE signups SET cancelled_at = ? WHERE id = ?").run(now, r.id);
+    audit(db, "signup.cancel", { id: r.id, scheduleId: r.schedule_id, auto: "late" }, now);
+  }
+}
+
 type Who = { account: Account } | { playerId: number };
 
 function findMine(db: DatabaseSync, scheduleId: number, who: Who): Row | undefined {
@@ -97,8 +127,11 @@ export function signUp(db: DatabaseSync, scheduleId: number, who: Who, input: un
   const g = sanitizeGuests(input);
   const mine = findMine(db, scheduleId, who);
   if (mine) {
+    const before = waitingIds(db, item);
     db.prepare("UPDATE signups SET guests = ?, guest_names = ? WHERE id = ?").run(g.guests, JSON.stringify(g.guestNames), mine.id);
     audit(db, "signup.update", { id: mine.id, scheduleId, guests: g.guests }, now);
+    before.delete(mine.id); // сам себе «вы прошли» не пишем
+    notifyPromoted(db, item, before, now); // гостей стало меньше — место могло освободиться
     return mine.id;
   }
   const id = Number(
@@ -117,7 +150,10 @@ export function cancelSignup(db: DatabaseSync, target: { scheduleId: number; acc
       ? (db.prepare(`${SELECT} AND s.id = ?`).get(target.signupId) as Row | undefined)
       : findMine(db, target.scheduleId, { account: target.account });
   if (!row) throw new Error("Запись не найдена");
+  const item = getItem(db, row.schedule_id);
+  const before = waitingIds(db, item);
   db.prepare("UPDATE signups SET cancelled_at = ? WHERE id = ?").run(now, row.id);
+  notifyPromoted(db, item, before, now);
   audit(db, "signup.cancel", { id: row.id, scheduleId: row.schedule_id, byAdmin: "signupId" in target }, now);
   return { scheduleId: row.schedule_id, playerId: row.player_id };
 }

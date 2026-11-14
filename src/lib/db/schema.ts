@@ -320,4 +320,31 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE events ADD COLUMN bonus TEXT;
   `,
+  // 11 — Telegram-бот (docs/SITE.md, шаг 5).
+  // accounts.telegram_id — чат игрока в Telegram (привязка по номеру или по ссылке из кабинета);
+  // accounts.tg_role — кому бот пишет служебное: 'admin' (заявки, итоги турнира) или 'owner' (ещё и отчёт с кассой).
+  // telegram_codes — одноразовые коды ссылки «Подключить Telegram» из личного кабинета.
+  // telegram_outbox — очередь сообщений; dedupe не даёт отправить одно и то же дважды (напоминание, итоги…).
+  `
+  ALTER TABLE accounts ADD COLUMN telegram_id INTEGER;
+  ALTER TABLE accounts ADD COLUMN tg_role TEXT;
+  CREATE UNIQUE INDEX accounts_telegram ON accounts (telegram_id) WHERE telegram_id IS NOT NULL;
+  CREATE TABLE telegram_codes (
+    code       TEXT PRIMARY KEY,
+    account_id INTEGER NOT NULL REFERENCES accounts (id),
+    expires_at INTEGER NOT NULL
+  );
+  CREATE TABLE telegram_outbox (
+    id         INTEGER PRIMARY KEY,
+    chat_id    INTEGER NOT NULL,
+    text       TEXT NOT NULL,
+    buttons    TEXT,
+    dedupe     TEXT UNIQUE,
+    created_at INTEGER NOT NULL,
+    sent_at    INTEGER,
+    tries      INTEGER NOT NULL DEFAULT 0,
+    error      TEXT
+  );
+  CREATE INDEX telegram_outbox_unsent ON telegram_outbox (sent_at) WHERE sent_at IS NULL;
+  `,
 ];
