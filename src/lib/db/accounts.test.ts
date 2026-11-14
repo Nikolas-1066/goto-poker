@@ -59,7 +59,7 @@ describe("заявка и подтверждение", () => {
     const token = register(db, { name: "Александр", phone: "8 900 111-22-33", password: "секрет1" }, NOW);
     const acc = sessionAccount(db, token, NOW)!;
     expect(acc.playerId).toBeNull();
-    expect(accountMe(db, acc)).toEqual({ status: "pending", name: "Александр", phone: "+7 900 111-22-33" });
+    expect(accountMe(db, acc)).toEqual({ status: "pending", name: "Александр", phone: "+7 900 111-22-33", telegram: false });
     expect(listRequests(db)).toEqual([{ id: acc.id, name: "Александр", phone: "+79001112233", createdAt: NOW, match: { playerId: sasha, name: "Саша" } }]);
 
     expect(confirmRequest(db, acc.id, null, NOW)).toEqual({ playerId: sasha, created: false });

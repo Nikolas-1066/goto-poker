@@ -84,12 +84,14 @@ export function finalProgress(z: FinalZone): { have: number; need: number; perce
 export type AccountMe =
   | { status: "none" }
   /** Заявка отправлена, админ ещё не подтвердил */
-  | { status: "pending"; name: string; phone: string }
+  | { status: "pending"; name: string; phone: string; telegram: boolean }
   | {
       status: "active";
       playerId: number;
       name: string;
       phone: string;
+      /** Подключён ли Telegram-бот */
+      telegram: boolean;
       /** Версия фото (время загрузки) или null — фото нет */
       photo: number | null;
       /** Идущий месяц: где игрок относительно зоны финала (пусто — месяц не идёт) */

@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { FINALIST_MESSAGE_MAX, type AccountRequest } from "@/lib/account";
 import { formatPhone, type Player } from "@/lib/players";
 import { Avatar, fileToJpeg, refreshPhotos } from "@/components/site/Avatar";
+import { TelegramRole, TelegramSend } from "./Telegram";
 import { Button, Card, inputClass } from "./ui";
 
 async function post(body: Record<string, unknown>) {
@@ -197,6 +198,7 @@ export function PlayerAccount({ playerId, name }: { playerId: number; name: stri
           <div className="text-slate-400">Входа на сайт нет. Игрок регистрируется сам на сайте — заявка появится в разделе «Игроки».</div>
         )}
       </div>
+      <TelegramRole playerId={playerId} />
       {error && <div className="mt-2 text-sm text-red-300">{error}</div>}
     </Card>
   );
@@ -255,9 +257,12 @@ export function FinalistMessageEditor() {
       />
       {error && <div className="mt-2 text-sm text-red-300">{error}</div>}
       {flash && <div className="mt-2 text-sm text-emerald-300">{flash}</div>}
-      <Button className="mt-3" variant="primary" disabled={busy || draft === saved} onClick={save}>
-        Сохранить
-      </Button>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Button variant="primary" disabled={busy || draft === saved} onClick={save}>
+          Сохранить
+        </Button>
+        {draft === saved && <TelegramSend kind="finalists" />}
+      </div>
     </Card>
   );
 }

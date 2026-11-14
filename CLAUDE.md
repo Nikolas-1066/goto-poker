@@ -84,6 +84,10 @@ Telegram Mini App для игроков. Архитектуру делать т�
   запись админом, перенос записанных в открытый турнир. Чистые функции `src/lib/signup.ts`, база `src/lib/db/signups.ts`
   (миграция 9), API `/api/signup`; UI `src/components/site/Signup.tsx` (карточка турнира, «Мои записи»), админка `Signups.tsx`.
   Бонус «приведи друга»: `Prices.friendBonus` в структуре, `setBroughtBy` и `friendInfo` в `tournament.ts`, блок «Новички» в `TournamentPlayers.tsx`.
+- Telegram-бот (`docs/SITE.md`, шаг 5 Этапа 3): запускается вместе с сервером (`src/instrumentation.ts`, long polling), токен —
+  `TELEGRAM_BOT_TOKEN` в `.env.local` (секрет, в чат и в git не попадает). `src/lib/telegram/` (`texts.ts`, `bot.ts` — `handleUpdate`,
+  `runner.ts`), база `src/lib/db/telegram.ts` (миграция 11, очередь `telegram_outbox`), фоновые задачи `telegramJobs.ts`,
+  API `/api/telegram`, админка `Telegram.tsx`. Разговор и задачи тестируются без Telegram (`bot.test.ts`).
 - Отчёт владельцу после турнира: `src/lib/report.ts` (сдвиг мест, текст), `src/lib/db/report.ts`, `/api/report`;
   UI `src/components/admin/Report.tsx` (текст + «Скопировать» работает и по http, напоминание до копирования)
   и `ReportImages.tsx` (3 картинки на canvas без кассы). В карточке «Игроки» после завершения и в «Истории».

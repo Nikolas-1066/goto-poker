@@ -110,9 +110,52 @@ function Pending({ me }: { me: Extract<AccountMe, { status: "pending" }> }) {
           {me.name}, ваша заявка ждёт подтверждения в клубе. Как только администратор её подтвердит, здесь откроется личный кабинет.
         </p>
         <p className="mt-2 text-sm text-slate-400">Телефон: {me.phone}. Чтобы было быстрее, скажите администратору на ближайшей игре.</p>
+        <p className="mt-2 text-sm text-slate-300">Записываться на турниры можно уже сейчас — в «Расписании».</p>
+        <div className="mt-2">
+          <TelegramLink linked={me.telegram} />
+        </div>
         <Logout className="mt-4" />
       </Panel>
     </div>
+  );
+}
+
+/** «Подключить Telegram»: ссылка в бота с одноразовым кодом — привязка без ввода номера */
+function TelegramLink({ linked }: { linked: boolean }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [off, setOff] = useState(false);
+
+  async function post(action: "link" | "unlink") {
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch("/api/telegram", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) });
+      const d = await res.json();
+      if (!res.ok) setError(d.error ?? "Не получилось");
+      else if (action === "link") window.location.assign(d.url);
+      else setOff(true);
+    } catch {
+      setError("Нет связи с сервером");
+    }
+    setBusy(false);
+  }
+
+  if (error) return <span className="text-sm text-red-300">{error}</span>;
+  if (linked && !off) {
+    return (
+      <span className="text-sm text-emerald-300">
+        Telegram подключён{" "}
+        <button type="button" disabled={busy} onClick={() => post("unlink")} className="text-slate-500 underline hover:text-slate-300">
+          отключить
+        </button>
+      </span>
+    );
+  }
+  return (
+    <button type="button" disabled={busy} onClick={() => post("link")} className="text-sm font-semibold text-sky-300 hover:text-sky-200 disabled:opacity-50">
+      Подключить Telegram — напоминания и запись в боте
+    </button>
   );
 }
 
@@ -297,6 +340,7 @@ function ProfileHead({ me }: { me: Extract<AccountMe, { status: "active" }> }) {
                 Убрать фото
               </button>
             )}
+            <TelegramLink linked={me.telegram} />
           </div>
         </div>
         <Logout />

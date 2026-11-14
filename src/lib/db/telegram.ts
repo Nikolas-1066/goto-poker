@@ -80,10 +80,6 @@ export function linkByPhone(db: DatabaseSync, telegramId: number, phoneInput: un
   return { account: accountByTelegram(db, telegramId)!, created };
 }
 
-/** Подключён ли Telegram у входа (для личного кабинета) */
-export const hasTelegram = (db: DatabaseSync, accountId: number) =>
-  (db.prepare("SELECT telegram_id FROM accounts WHERE id = ?").get(accountId) as { telegram_id: number | null } | undefined)?.telegram_id != null;
-
 export function unlinkTelegram(db: DatabaseSync, accountId: number, now = Date.now()) {
   db.prepare("UPDATE accounts SET telegram_id = NULL, tg_role = NULL WHERE id = ?").run(accountId);
   audit(db, "telegram.unlink", { accountId }, now);

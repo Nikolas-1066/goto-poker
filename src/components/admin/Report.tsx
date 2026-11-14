@@ -4,6 +4,7 @@
 // В баре админка открыта по http://IP — браузер там не даёт сайту доступ к буферу обмена и «Поделиться»,
 // поэтому копируем старым способом через выделенное текстовое поле, а картинки — «нажать и подержать».
 
+import { TelegramSend } from "./Telegram";
 import { useCallback, useEffect, useState } from "react";
 import { reportText, type TournamentReport } from "@/lib/report";
 import { ReportImages } from "./ReportImages";
@@ -81,6 +82,9 @@ export function ReportBlock({ tournamentId, remind = false }: { tournamentId?: n
       <Button variant={remind && !data.sent ? "primary" : "default"} className="w-full sm:w-auto" onClick={() => setOpen(true)}>
         📋 Отчёт для владельца
       </Button>
+      <div className="mt-2">
+        <TelegramSend kind="results" tournamentId={data.report.tournament.id} />
+      </div>
       {open && <ReportPanel report={data.report} onCopied={markSent} onClose={() => setOpen(false)} />}
     </>
   );

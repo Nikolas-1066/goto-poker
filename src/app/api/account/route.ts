@@ -1,6 +1,7 @@
 import { connection, type NextRequest } from "next/server";
 import { normalizePhone } from "@/lib/players";
 import { accountMe, changePassword, closeSession, login, register, removePhoto, renamePlayer, sessionAccount, setPhoto } from "@/lib/db/accounts";
+import { notifyRequest } from "@/lib/db/telegram";
 import { lockedMinutes, noteLogin, photoBytes, playerCookie, playerToken } from "@/lib/playerAuth";
 import { withDatabase } from "@/lib/store";
 
@@ -36,7 +37,15 @@ export async function POST(req: NextRequest) {
       const key = normalizePhone(String(body.phone ?? "")) ?? "?";
       const wait = body.action === "login" ? lockedMinutes(key) : 0;
       if (wait) return json({ error: `Слишком много попыток. Попробуйте через ${wait} мин.` }, 429);
-      const fresh = await withDatabase((db) => (body.action === "register" ? register(db, body) : login(db, body.phone, body.password)));
+      const fresh = await withDatabase((db) => {
+        if (body.action !== "register") return login(db, body.phone, body.password);
+        const t = register(db, body);
+        // админам и владельцу — сообщение в Telegram о новой заявке
+        const acc = sessionAccount(db, t)!;
+        const known = !!db.prepare("SELECT 1 FROM players WHERE phone = ? AND archived_at IS NULL").get(acc.phone);
+        notifyRequest(db, { name: acc.name, phone: acc.phone, known }, "site");
+        return t;
+      });
       if (body.action === "login") noteLogin(key, !!fresh);
       if (!fresh) {
         await slow();

@@ -6,6 +6,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { ScheduleSignups } from "@/components/admin/Signups";
+import { TelegramCard } from "@/components/admin/Telegram";
 import type { AdminSignup } from "@/lib/db/signups";
 import type { Player } from "@/lib/players";
 import { AboutEditor } from "@/components/admin/AboutEditor";
@@ -235,6 +236,7 @@ function Schedule() {
           </Card>
           <AboutEditor />
           <FinalistMessageEditor />
+          <TelegramCard />
         </div>
       </div>
     </div>

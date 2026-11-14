@@ -271,10 +271,11 @@ const periodLabel = (p: Period) => `${PERIOD_LABEL[p.kind]} · ${p.name}`;
 
 /** Что видит вошедший игрок: статус заявки, а после подтверждения — профиль и всё про финал */
 export function accountMe(db: DatabaseSync, account: Account): AccountMe {
-  if (account.playerId == null) return { status: "pending", name: account.name, phone: formatPhone(account.phone) };
+  const telegram = (db.prepare("SELECT telegram_id FROM accounts WHERE id = ?").get(account.id) as { telegram_id: number | null } | undefined)?.telegram_id != null;
+  if (account.playerId == null) return { status: "pending", name: account.name, phone: formatPhone(account.phone), telegram };
   const player = getPlayer(db, account.playerId);
   // игрока убрали в архив — вход остаётся, но показать нечего: как заявка
-  if (!player) return { status: "pending", name: account.name, phone: formatPhone(account.phone) };
+  if (!player) return { status: "pending", name: account.name, phone: formatPhone(account.phone), telegram };
   // «Путь в финал» — только по идущему месяцу (решение владельца)
   const month = openPeriod(db, "month");
   const zones = month ? [{ label: periodLabel(month), zone: finalZone(standingsOf(db, month), player.id, month.finalistsN) }] : [];
@@ -294,6 +295,7 @@ export function accountMe(db: DatabaseSync, account: Account): AccountMe {
     playerId: player.id,
     name: player.name,
     phone: formatPhone(account.phone),
+    telegram,
     photo,
     zones,
     finalistOf,
