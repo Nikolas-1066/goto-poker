@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { AUTH_COOKIE, checkPassword, currentToken, isAdmin, isHttps } from "@/lib/auth";
+import { AUTH_COOKIE, checkPassword, currentToken, isAdmin, isHttps, weakForPublic } from "@/lib/auth";
 import { OWNER_COOKIE } from "@/lib/owner";
 
 export async function GET(req: NextRequest) {
@@ -9,6 +9,12 @@ export async function GET(req: NextRequest) {
 // Вход: { password }
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as { password?: string };
+  if (weakForPublic(req)) {
+    return Response.json(
+      { error: "Админка из интернета открывается только со своим паролем: впишите строку ADMIN_PASSWORD=… в файл .env.local и перезапустите программу" },
+      { status: 403 },
+    );
+  }
   if (!body.password || !checkPassword(body.password)) {
     await new Promise((r) => setTimeout(r, 600)); // притормозить перебор
     return Response.json({ error: "Неверный пароль" }, { status: 401 });

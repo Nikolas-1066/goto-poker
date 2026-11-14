@@ -5,8 +5,14 @@ import { formatKo, type TournamentReport } from "../report";
 import { formatDay } from "../schedule";
 import type { MySignup } from "../signup";
 
-/** Кнопка под сообщением: подпись и команда, которая придёт боту при нажатии */
-export type TgButton = { text: string; data: string };
+/**
+ * Кнопка под сообщением: подпись и команда, которая придёт боту при нажатии.
+ * app — кнопка открывает мини-приложение (data — страница сайта, например "/schedule"); без адреса сайта не показывается.
+ */
+export type TgButton = { text: string; data: string; app?: boolean };
+
+/** Кнопка «Открыть приложение» — сайт клуба внутри Telegram */
+export const appButton = (path = "/profile"): TgButton[] => [{ text: "📱 Открыть приложение клуба", data: path, app: true }];
 /** Сообщение бота: текст, кнопки под ним (ряды), нижняя клавиатура (menu / contact / none — не менять) */
 export type TgMessage = { chatId: number; text: string; buttons?: TgButton[][]; keyboard?: "menu" | "contact" };
 

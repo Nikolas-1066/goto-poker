@@ -4,13 +4,16 @@
 
 import { getOffset, markFailed, markSent, pendingOutbox, setOffset } from "../db/telegram";
 import { botTick } from "../db/telegramJobs";
-import { hasDatabase, updateDb, withDatabase } from "../store";
+import { hasDatabase, publicUrl, updateDb, withDatabase } from "../store";
 import { BotError, handleUpdate, type BotReply, type TgUpdate } from "./bot";
 import { MENU, type TgMessage } from "./texts";
 
-type BotGlobal = { started: boolean; username: string | null; lastError: string | null };
+type BotGlobal = { started: boolean; username: string | null; lastError: string | null; menuUrl: string | null | undefined };
 const g = globalThis as unknown as { __gotoBot?: BotGlobal };
-const bot: BotGlobal = (g.__gotoBot ??= { started: false, username: null, lastError: null });
+const bot: BotGlobal = (g.__gotoBot ??= { started: false, username: null, lastError: null, menuUrl: undefined });
+
+/** Адрес мини-приложения, с которым бот сейчас работает (null — адреса нет) */
+let appUrl: string | null = null;
 
 /** Имя бота (@…) — для ссылки «Подключить Telegram»; null — бот не запущен */
 export const botUsername = () => bot.username;
@@ -34,10 +37,21 @@ async function call<T>(method: string, body: unknown, timeoutMs = 20_000): Promi
 const MENU_KEYBOARD = { keyboard: [[{ text: MENU.schedule }], [{ text: MENU.mine }, { text: MENU.rating }]], resize_keyboard: true };
 const CONTACT_KEYBOARD = { keyboard: [[{ text: "📱 Поделиться номером", request_contact: true }]], resize_keyboard: true, one_time_keyboard: true };
 
+/** Кнопки под сообщением; кнопки мини-приложения без адреса сайта пропускаются */
+function inline(buttons: TgMessage["buttons"]) {
+  const rows = (buttons ?? [])
+    .map((row) => row.filter((b) => !b.app || appUrl).map((b) => (b.app ? { text: b.text, web_app: { url: `${appUrl}${b.data}` } } : { text: b.text, callback_data: b.data })))
+    .filter((row) => row.length);
+  return rows.length ? rows : null;
+}
+
 /** Отправить одно сообщение. Кнопки под сообщением и нижняя клавиатура вместе не бывают — кнопки главнее. */
-function send(m: Pick<TgMessage, "chatId" | "text" | "buttons" | "keyboard">) {
-  const reply_markup = m.buttons?.length
-    ? { inline_keyboard: m.buttons.map((row) => row.map((b) => ({ text: b.text, callback_data: b.data }))) }
+async function send(m: Pick<TgMessage, "chatId" | "text" | "buttons" | "keyboard">) {
+  const rows = inline(m.buttons);
+  // сообщение было только ради кнопки мини-приложения, а адреса нет — не отправляем
+  if (m.buttons?.length && !rows && !m.keyboard) return { ok: true as const, result: null };
+  const reply_markup = rows
+    ? { inline_keyboard: rows }
     : m.keyboard === "menu"
       ? MENU_KEYBOARD
       : m.keyboard === "contact"
@@ -106,8 +120,21 @@ async function poll() {
   }
 }
 
+/** Кнопка «Приложение» слева от поля ввода в боте: открывает сайт клуба внутри Telegram (нужен https-адрес) */
+async function syncMenuButton() {
+  appUrl = await publicUrl();
+  if (!bot.username || bot.menuUrl === appUrl) return;
+  const menu_button = appUrl ? { type: "web_app", text: "Приложение", web_app: { url: `${appUrl}/profile` } } : { type: "default" };
+  const res = await call("setChatMenuButton", { menu_button }).catch(() => null);
+  if (res?.ok) {
+    bot.menuUrl = appUrl;
+    if (appUrl) console.log(`[bot] мини-приложение: ${appUrl}`);
+  }
+}
+
 async function tick() {
   try {
+    if (token()) await syncMenuButton();
     if (!(await hasDatabase())) return;
     await updateDb(
       (db) => db.tournament,
@@ -123,7 +150,8 @@ async function tick() {
 export function startBot() {
   if (bot.started) return;
   bot.started = true;
-  const timer = setInterval(tick, 30_000);
+  // раз в 15 секунд: адрес мини-приложения меняется при каждом запуске npm run tunnel
+  const timer = setInterval(tick, 15_000);
   timer.unref?.();
   if (token()) connect();
 }
@@ -140,6 +168,7 @@ function connect() {
       bot.username = me.result.username;
       bot.lastError = null;
       console.log(`[bot] Telegram-бот @${me.result.username} запущен`);
+      void syncMenuButton();
       void poll();
     })
     .catch(() => {

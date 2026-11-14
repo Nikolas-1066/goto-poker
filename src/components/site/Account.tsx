@@ -9,7 +9,8 @@ import { Avatar, fileToJpeg, refreshPhotos } from "./Avatar";
 import { PlayerStats } from "./PlayerStats";
 import { MySignupsPanel } from "./Signup";
 import { GOLD, Muted, OUTLINE, PageTitle, Panel, SiteShell, useSite } from "./SiteShell";
-import { accountAction, useMe } from "./useMe";
+import { closeApp, requestPhone } from "./telegramApp";
+import { accountAction, loadMe, tgNeedLink, useMe } from "./useMe";
 
 const INPUT = "w-full rounded-lg border border-white/10 bg-[#0b131c] px-3 py-2.5 text-base text-slate-100 outline-none focus:border-amber-300/60";
 const Label = ({ text, children }: { text: string; children: ReactNode }) => (
@@ -25,10 +26,48 @@ export function ProfilePage() {
   return (
     <SiteShell>
       {!me && <Muted>Загрузка…</Muted>}
-      {me?.status === "none" && <SignIn />}
+      {me?.status === "none" && (tgNeedLink() ? <TelegramLinkFirst /> : <SignIn />)}
       {me?.status === "pending" && <Pending me={me} />}
       {me?.status === "active" && <Profile me={me} />}
     </SiteShell>
+  );
+}
+
+// ---------- Мини-приложение: Telegram ещё не привязан ----------
+
+function TelegramLinkFirst() {
+  const [state, setState] = useState<"idle" | "waiting" | "failed">("idle");
+
+  async function share() {
+    setState("waiting");
+    if (!(await requestPhone())) return setState("failed");
+    // номер уходит боту, бот привязывает его за пару секунд — пробуем войти снова
+    for (let i = 0; i < 8; i++) {
+      await new Promise((r) => setTimeout(r, 1500));
+      await loadMe();
+      if (!tgNeedLink()) return;
+    }
+    setState("failed");
+  }
+
+  return (
+    <div className="mx-auto max-w-md">
+      <PageTitle>Вход по Telegram</PageTitle>
+      <Panel>
+        <p className="text-slate-200">Чтобы войти, поделитесь номером телефона — так мы найдём вас в базе клуба. Пароль не нужен.</p>
+        <button type="button" disabled={state === "waiting"} onClick={share} className={`mt-4 w-full rounded-xl px-5 py-3 ${GOLD} disabled:opacity-60`}>
+          {state === "waiting" ? "Секунду…" : "📱 Поделиться номером"}
+        </button>
+        {state === "failed" && (
+          <p className="mt-3 text-sm text-amber-200">
+            Не получилось. Закройте приложение и нажмите в чате с ботом кнопку «Поделиться номером» внизу — потом откройте приложение снова.
+          </p>
+        )}
+        <button type="button" onClick={() => closeApp()} className={`mt-3 w-full rounded-xl px-5 py-2.5 text-sm ${OUTLINE}`}>
+          Вернуться в чат с ботом
+        </button>
+      </Panel>
+    </div>
   );
 }
 

@@ -91,7 +91,8 @@ chrome --kiosk --autoplay-policy=no-user-gesture-required https://tablo.вашд
 ssh root@IP
 systemctl status goto-poker          # работает ли табло
 journalctl -u goto-poker -n 100      # логи
-nano /etc/goto-poker.env             # сменить пароль админки (ADMIN_PASSWORD=...)
+nano /etc/goto-poker.env             # пароль админки (ADMIN_PASSWORD=...), токен бота (TELEGRAM_BOT_TOKEN=...),
+                                     # адрес сайта для мини-приложения (PUBLIC_URL=https://домен)
 systemctl restart goto-poker         # применить
 ls /var/backups/goto-poker           # ежедневные копии базы (60 дней)
 ```

@@ -16,6 +16,8 @@ const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "data");
 const JSON_FILE = path.join(DATA_DIR, "goto-poker.json");
 // Забыли пароль владельца: на ноутбуке СБРОС-ПАРОЛЯ-ВЛАДЕЛЬЦА создаёт этот файл (см. README-RU.txt)
 const OWNER_RESET_FILE = path.join(DATA_DIR, "reset-owner-password.txt");
+// Временный https-адрес сайта (npm run tunnel пишет его сюда) — для кнопки мини-приложения в Telegram-боте
+const PUBLIC_URL_FILE = path.join(DATA_DIR, "public-url.txt");
 
 type StoreGlobal = {
   db: Db | null;
@@ -149,6 +151,28 @@ export async function takeOwnerResetRequest() {
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Адрес сайта в интернете (https) — для мини-приложения Telegram. На сервере задаётся переменной PUBLIC_URL,
+ * на компьютере — временный адрес из файла, который пишет `npm run tunnel`. null — адреса нет.
+ */
+export async function publicUrl(): Promise<string | null> {
+  const env = process.env.PUBLIC_URL?.trim();
+  let raw = env || "";
+  if (!raw) {
+    try {
+      raw = (await fs.readFile(PUBLIC_URL_FILE, "utf8")).trim();
+    } catch {
+      return null;
+    }
+  }
+  try {
+    const url = new URL(raw);
+    return url.protocol === "https:" ? url.origin : null;
+  } catch {
+    return null;
   }
 }
 

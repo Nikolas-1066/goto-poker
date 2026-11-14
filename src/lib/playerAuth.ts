@@ -8,14 +8,17 @@ export const PLAYER_COOKIE = "goto_player";
 
 export const playerToken = (req: NextRequest) => req.cookies.get(PLAYER_COOKIE)?.value;
 
-export function playerCookie(req: NextRequest, token: string | null) {
+/** framed — вход из мини-приложения: в веб-версии Telegram оно во фрейме, cookie нужен SameSite=None (только по https) */
+export function playerCookie(req: NextRequest, token: string | null, framed = false) {
+  const none = framed && isHttps(req);
   return [
     `${PLAYER_COOKIE}=${token ?? ""}`,
     "Path=/",
     "HttpOnly",
-    "SameSite=Lax",
+    none ? "SameSite=None" : "SameSite=Lax",
+    none ? "Partitioned" : "",
     `Max-Age=${token ? Math.floor(SESSION_MS / 1000) : 0}`,
-    isHttps(req) ? "Secure" : "",
+    isHttps(req) || none ? "Secure" : "",
   ]
     .filter(Boolean)
     .join("; ");

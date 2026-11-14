@@ -28,7 +28,23 @@ export function checkPassword(candidate: string) {
   return safeEqual(tokenFor(candidate), tokenFor(password()));
 }
 
+/**
+ * Сайт открыт из интернета (временный адрес `npm run tunnel` или сервер), а не с этого компьютера или
+ * из Wi-Fi клуба: по адресу, с которым пришёл запрос.
+ */
+export function isPublicRequest(req: NextRequest) {
+  const host = (req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "").split(",")[0].trim().toLowerCase();
+  const name = host.startsWith("[") ? host.slice(1, host.indexOf("]")) : host.split(":")[0];
+  if (!name) return false;
+  if (name === "localhost" || name.endsWith(".localhost") || name.endsWith(".local") || name === "::1") return false;
+  return !/^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(name);
+}
+
+/** Пароль по умолчанию «goto» из интернета не принимаем: его знает кто угодно */
+export const weakForPublic = (req: NextRequest) => !process.env.ADMIN_PASSWORD && isPublicRequest(req);
+
 export function isAdmin(req: NextRequest) {
+  if (weakForPublic(req)) return false;
   const token = req.cookies.get(AUTH_COOKIE)?.value;
   return !!token && safeEqual(token, tokenFor(password()));
 }

@@ -13,7 +13,7 @@ import { accountByTelegram, displayName, linkByCode, linkByPhone } from "../db/t
 import { clubToday, sortSchedule } from "../schedule";
 import { MAX_GUESTS, signupOpen } from "../signup";
 import type { Db } from "../types";
-import { cancelledText, COMING_OK, HELLO, linkedText, MENU, NOT_YOUR_CONTACT, pendingText, ratingText, signedText, whenText, type TgButton, type TgMessage } from "./texts";
+import { appButton, cancelledText, COMING_OK, HELLO, linkedText, MENU, NOT_YOUR_CONTACT, pendingText, ratingText, signedText, whenText, type TgButton, type TgMessage } from "./texts";
 
 /** То немногое из сообщения Telegram, что нужно боту */
 export type TgUpdate = {
@@ -83,13 +83,14 @@ export function handleUpdate(db: DatabaseSync, next: Db, update: TgUpdate, now =
     const start = /^\/start(?:\s+(\S+))?/.exec(msg?.text ?? "");
     if (start?.[1]) {
       const linked = linkByCode(db, start[1], fromId, now);
-      if (linked) return say(linkedText(displayName(db, linked)), { keyboard: "menu" });
+      if (linked) return { messages: [{ chatId, text: linkedText(displayName(db, linked)), keyboard: "menu" }, { chatId, text: "Всё то же самое — в приложении клуба:", buttons: [appButton()] }] };
     }
     if (msg?.contact) {
       if (msg.contact.user_id !== fromId) return say(NOT_YOUR_CONTACT, { keyboard: "contact" });
       const name = [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(" ");
       const { account, created } = linkByPhone(db, fromId, msg.contact.phone_number, name, now);
-      return say(created ? pendingText(account.name) : linkedText(displayName(db, account)), { keyboard: "menu" });
+      const first: TgMessage = { chatId, text: created ? pendingText(account.name) : linkedText(displayName(db, account)), keyboard: "menu" };
+      return { messages: [first, { chatId, text: "Всё то же самое — в приложении клуба:", buttons: [appButton()] }] };
     }
 
     const account = accountByTelegram(db, fromId);

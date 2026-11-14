@@ -1,6 +1,8 @@
 import { connection, type NextRequest } from "next/server";
 import { normalizePhone } from "@/lib/players";
-import { accountMe, changePassword, closeSession, login, register, removePhoto, renamePlayer, sessionAccount, setPhoto } from "@/lib/db/accounts";
+import { accountMe, changePassword, closeSession, login, openSession, register, removePhoto, renamePlayer, sessionAccount, setPhoto } from "@/lib/db/accounts";
+import { accountByTelegram } from "@/lib/db/telegram";
+import { verifyLoginWidget, verifyWebAppData } from "@/lib/telegram/auth";
 import { notifyRequest } from "@/lib/db/telegram";
 import { lockedMinutes, noteLogin, photoBytes, playerCookie, playerToken } from "@/lib/playerAuth";
 import { withDatabase } from "@/lib/store";
@@ -26,7 +28,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-type Body = { action?: string; name?: unknown; phone?: unknown; password?: unknown; old?: unknown; data?: unknown };
+type Body = { action?: string; name?: unknown; phone?: unknown; password?: unknown; old?: unknown; data?: unknown; initData?: unknown; widget?: unknown };
 
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as Body;
@@ -53,6 +55,23 @@ export async function POST(req: NextRequest) {
       }
       const res = json(await withDatabase((db) => accountMe(db, sessionAccount(db, fresh)!)));
       res.headers.append("Set-Cookie", playerCookie(req, fresh));
+      return res;
+    }
+
+    // вход по Telegram: мини-приложение (initData) или кнопка «Войти через Telegram» на сайте (поля виджета)
+    if (body.action === "telegram" || body.action === "telegramLogin") {
+      const botToken = process.env.TELEGRAM_BOT_TOKEN?.trim() ?? "";
+      const who = body.action === "telegram" ? verifyWebAppData(body.initData, botToken) : verifyLoginWidget(body.widget, botToken);
+      if (!who) return json({ error: "Не удалось проверить вход через Telegram — откройте заново" }, 401);
+      const fresh = await withDatabase((db) => {
+        const account = accountByTelegram(db, who.telegramId);
+        return account ? openSession(db, account.id) : null;
+      });
+      // Telegram ещё не привязан к профилю — нужно поделиться номером в боте
+      if (!fresh) return json({ status: "none", needLink: true });
+      const res = json(await withDatabase((db) => accountMe(db, sessionAccount(db, fresh)!)));
+      // мини-приложение в веб-версии Telegram открывается во фрейме — там cookie нужен SameSite=None
+      res.headers.append("Set-Cookie", playerCookie(req, fresh, body.action === "telegram"));
       return res;
     }
 
