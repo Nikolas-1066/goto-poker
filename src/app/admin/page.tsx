@@ -10,6 +10,7 @@ import { fetchDebtWarning } from "@/components/admin/Cash";
 import { PricesLine } from "@/components/admin/PricesLine";
 import type { Preset, Step, Tournament, TournamentAction, TournamentMode } from "@/lib/types";
 import { useTournament } from "@/lib/useTournament";
+import { askConfirm } from "@/components/admin/confirm";
 
 export default function AdminPage() {
   return (
@@ -32,7 +33,7 @@ function Control() {
   }, []);
 
   async function act(action: TournamentAction, confirmText?: string) {
-    if (confirmText && !window.confirm(confirmText)) return;
+    if (confirmText && !(await askConfirm(confirmText))) return;
     setError("");
     try {
       await send(action);
@@ -46,7 +47,7 @@ function Control() {
     if (
       mode === "players" &&
       tournament.entries > 0 &&
-      !window.confirm("Перейти на учёт по игрокам? Счётчики табло будут считаться по участникам, ручные цифры заменятся.")
+      !(await askConfirm("Перейти на учёт по игрокам? Счётчики табло будут считаться по участникам, ручные цифры заменятся.", "Перейти"))
     )
       return;
     setError("");

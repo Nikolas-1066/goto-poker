@@ -139,6 +139,8 @@ Telegram Mini App для игроков. Архитектуру делать т�
   Сброс: файл `DATA_DIR/reset-owner-password.txt` (на ноутбуке — `RESET-OWNER-PASSWORD.bat`).
 - Дизайн: тёмный фон `#080e15`, панели `#101923` с рамкой `white/[0.09]`, акцент `amber-300`,
   крупные цифры `tabular-nums`. Компоненты админки — `src/components/admin/ui.tsx`.
+  Подтверждения «Точно?» — только `askConfirm` (`src/components/admin/confirm.tsx`, окно на странице), **не `window.confirm`**:
+  во встроенных браузерах (приложение Claude) окно браузера не показывается и молча отвечает «нет».
   Логотип — `src/assets/logo.png`.
 
 ## Запуск и сборка

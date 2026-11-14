@@ -7,6 +7,7 @@ import { Button, Card, Field, inputClass } from "@/components/admin/ui";
 import { formatChips, formatClock, structureDurationMs } from "@/lib/clock";
 import { newId, NO_PRICES, suggestNextLevel, withPresetDefaults } from "@/lib/presets";
 import type { LevelStep, Preset, Step } from "@/lib/types";
+import { askConfirm } from "@/components/admin/confirm";
 
 export default function PresetsPage() {
   return (
@@ -75,12 +76,12 @@ function PresetsEditor() {
 
   const dirty = draft ? JSON.stringify(draft) !== saved : false;
 
-  function confirmLeave() {
-    return !dirty || window.confirm("Есть несохранённые изменения. Отменить их?");
+  async function confirmLeave() {
+    return !dirty || (await askConfirm("Есть несохранённые изменения. Отменить их?", "Отменить изменения"));
   }
 
-  function select(p: Preset) {
-    if (p.id === selectedId || !confirmLeave()) return;
+  async function select(p: Preset) {
+    if (p.id === selectedId || !(await confirmLeave())) return;
     const d = toDraft(p);
     setSelectedId(p.id);
     setDraft(d);
@@ -88,8 +89,8 @@ function PresetsEditor() {
     setMessage(null);
   }
 
-  function createNew(from?: Draft) {
-    if (!confirmLeave()) return;
+  async function createNew(from?: Draft) {
+    if (!(await confirmLeave())) return;
     const d: Draft = from
       ? { ...structuredClone(from), id: null, name: `${from.name} (копия)` }
       : blankDraft();
@@ -124,7 +125,7 @@ function PresetsEditor() {
       await load();
       return;
     }
-    if (!window.confirm(`Удалить пресет «${draft.name}»?`)) return;
+    if (!(await askConfirm(`Удалить пресет «${draft.name}»?`, "Удалить"))) return;
     const res = await fetch(`/api/presets/${draft.id}`, { method: "DELETE" });
     const data = await res.json();
     if (!res.ok) {

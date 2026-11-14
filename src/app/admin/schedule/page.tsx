@@ -17,6 +17,7 @@ import { formatRub } from "@/lib/cash";
 import { formatChips } from "@/lib/clock";
 import { dayHint, formatDay, templateLabel, WEEKDAYS, type ScheduleItem, type ScheduleTemplate } from "@/lib/schedule";
 import type { Preset } from "@/lib/types";
+import { askConfirm } from "@/components/admin/confirm";
 
 export default function SchedulePage() {
   return (
@@ -59,7 +60,7 @@ function Schedule() {
   }, []);
 
   async function act(action: object, confirmText?: string): Promise<boolean> {
-    if (confirmText && !window.confirm(confirmText)) return false;
+    if (confirmText && !(await askConfirm(confirmText))) return false;
     setBusy(true);
     setError("");
     setFlash("");

@@ -5,6 +5,7 @@ import Link from "next/link";
 import logo from "@/assets/logo.png";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ConfirmHost } from "./confirm";
 import { Button, inputClass } from "./ui";
 
 // short — подпись на узком экране телефона, чтобы всё меню помещалось в одну строку
@@ -101,6 +102,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
           <Login onSuccess={() => setAdmin(true)} />
         )}
       </div>
+      <ConfirmHost />
     </main>
   );
 }

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { formatRub } from "@/lib/cash";
 import { EXPENSE_KINDS, EXPENSE_LABEL, expenseTotals, formatHours, type Expense, type ExpenseKind } from "@/lib/expenses";
 import { Button, inputClass } from "./ui";
+import { askConfirm } from "@/components/admin/confirm";
 
 export function ExpensesBlock({
   expenses,
@@ -61,7 +62,7 @@ export function ExpensesBlock({
                     className="text-slate-500 hover:text-red-300"
                     title="Удалить"
                     disabled={busy}
-                    onClick={() => window.confirm(`Удалить расход: ${e.name}, ${formatRub(e.amount)}?`) && onDelete(e.id)}
+                    onClick={async () => (await askConfirm(`Удалить расход: ${e.name}, ${formatRub(e.amount)}?`, "Удалить")) && onDelete(e.id)}
                   >
                     ✕
                   </button>

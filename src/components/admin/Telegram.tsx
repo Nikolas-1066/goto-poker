@@ -144,6 +144,13 @@ export function TelegramSend({ kind, tournamentId }: { kind: "results" | "finali
   );
 }
 
+/** Что приходит от бота в каждой роли — подпись под выбором роли */
+const ROLE_HINT: Record<"player" | "admin" | "owner", string> = {
+  player: "Получает только своё: напоминания о турнирах, запись, итоги, анонсы клуба.",
+  admin: "Как игрок, плюс заявки на вход и итоги каждого турнира: ники, места, нокауты.",
+  owner: "Как админ, плюс полный отчёт после турнира: касса, долги, расходы, рейтинг.",
+};
+
 /** Роль в боте (карточка игрока): кому бот пишет о заявках и присылает итоги турнира. Меняет только владелец. */
 export function TelegramRole({ playerId }: { playerId: number }) {
   const [state, setState] = useState<{ linked: boolean; role: "admin" | "owner" | null } | null>(null);
@@ -162,7 +169,7 @@ export function TelegramRole({ playerId }: { playerId: number }) {
     <div className="mt-3 text-sm">
       <div className="text-emerald-300">Telegram подключён</div>
       <label className="mt-2 block text-slate-300">
-        Служебные сообщения от бота
+        Роль в боте
         <select
           className={`${inputClass} mt-1`}
           value={state.role ?? ""}
@@ -175,11 +182,12 @@ export function TelegramRole({ playerId }: { playerId: number }) {
             }
           }}
         >
-          <option value="">Не получает (обычный игрок)</option>
-          <option value="admin">Админ: заявки на вход и итоги турнира (ники, места, нокауты)</option>
-          <option value="owner">Владелец: то же и полный отчёт с кассой</option>
+          <option value="">Игрок</option>
+          <option value="admin">Админ</option>
+          <option value="owner">Владелец</option>
         </select>
       </label>
+      <div className="mt-1 text-xs text-slate-500">{ROLE_HINT[state.role ?? "player"]}</div>
       {error && <div className="mt-1 text-red-300">{error}</div>}
     </div>
   );

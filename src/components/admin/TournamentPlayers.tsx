@@ -15,6 +15,7 @@ import { CashLine, CashPanel, EnterButtons, OldDebtBadge, OldDebtsPanel, PayBadg
 import { ReportBlock } from "./Report";
 import { SeatingLine, TablesView } from "./Tables";
 import { Button, inputClass } from "./ui";
+import { askConfirm } from "@/components/admin/confirm";
 
 type FinalInfo = ReturnType<typeof finalInfo>;
 
@@ -174,7 +175,7 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
       let res = await post(action);
       let data = await res.json();
       if (res.status === 409 && data.needsForce) {
-        if (!window.confirm(`${data.error}. Всё равно?`)) return false;
+        if (!(await askConfirm(`${data.error}. Всё равно?`))) return false;
         res = await post({ ...action, force: true } as PlayerAction);
         data = await res.json();
       }
@@ -194,7 +195,7 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
   /** Завершить турнир; если кто-то не доплатил — предупредить (завершить всё равно можно) */
   async function finish(dealOrder?: number[]) {
     const warning = debtWarning(cashSummary);
-    if (warning && !window.confirm(`${warning}\n\nЗавершить турнир?`)) return false;
+    if (warning && !(await askConfirm(`${warning}\n\nЗавершить турнир?`, "Завершить"))) return false;
     return act(dealOrder ? { type: "finish", dealOrder } : { type: "finish" });
   }
 
@@ -541,9 +542,8 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
                   variant="ghost"
                   title="Отменить вылет"
                   disabled={busy}
-                  onClick={() =>
-                    window.confirm(`Отменить вылет: ${p.name}? Игрок вернётся в игру.`) &&
-                    act({ type: "cancel", eventId: p.lastBustEventId! })
+                  onClick={async () =>
+                    (await askConfirm(`Отменить вылет: ${p.name}? Игрок вернётся в игру.`)) && act({ type: "cancel", eventId: p.lastBustEventId! })
                   }
                 >
                   ↺
@@ -1024,7 +1024,7 @@ function DealPanel({
         <Button
           variant="primary"
           disabled={busy}
-          onClick={() => window.confirm("Завершить турнир с этими местами?") && onSubmit(order)}
+          onClick={async () => (await askConfirm("Завершить турнир с этими местами?", "Завершить")) && onSubmit(order)}
         >
           Завершить
         </Button>
@@ -1044,7 +1044,7 @@ function UndoEntry({ p, busy, onCancel }: { p: ParticipantView; busy: boolean; o
       variant="ghost"
       title={reentry ? "Отменить re-entry" : "Отменить «Пришёл» (мисклик)"}
       disabled={busy}
-      onClick={() => window.confirm(text) && onCancel(p.lastEntryEventId!)}
+      onClick={async () => (await askConfirm(text)) && onCancel(p.lastEntryEventId!)}
     >
       ↺ {reentry ? "RE" : "вход"}
     </Button>
@@ -1059,7 +1059,7 @@ function UndoAddon({ p, busy, onCancel }: { p: ParticipantView; busy: boolean; o
       variant="ghost"
       title={`Отменить ${what}`}
       disabled={busy}
-      onClick={() => window.confirm(`Отменить ${what} у игрока ${p.name}?`) && onCancel(p.addonEventId!)}
+      onClick={async () => (await askConfirm(`Отменить ${what} у игрока ${p.name}?`)) && onCancel(p.addonEventId!)}
     >
       ↺ {p.doubleAddons > 0 ? "2А" : "А"}
     </Button>

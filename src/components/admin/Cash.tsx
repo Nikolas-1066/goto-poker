@@ -16,6 +16,7 @@ import {
 } from "@/lib/cash";
 import type { PlayerDebt } from "@/lib/db/cash";
 import { Button, inputClass } from "./ui";
+import { askConfirm } from "@/components/admin/confirm";
 
 /** Есть ли у игрока что показывать в кассе */
 export const hasCash = (c: PlayerCash) => c.charges.some((x) => x.price > 0) || c.payments.length > 0;
@@ -105,7 +106,7 @@ export function CashPanel({
                 variant="ghost"
                 disabled={busy}
                 title="Отменить оплату"
-                onClick={() => window.confirm(`Отменить оплату ${formatRub(p.amount)} от ${name}?`) && onCancelPayment(p.id)}
+                onClick={async () => (await askConfirm(`Отменить оплату ${formatRub(p.amount)} от ${name}?`)) && onCancelPayment(p.id)}
               >
                 ↺
               </Button>

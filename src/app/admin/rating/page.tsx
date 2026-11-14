@@ -17,6 +17,7 @@ import {
 import type { PeriodView, Period, StandingRow } from "@/lib/db/periods";
 import type { ClubSettings, PeriodKind } from "@/lib/db/settings";
 import type { Player } from "@/lib/players";
+import { askConfirm } from "@/components/admin/confirm";
 
 export default function RatingPage() {
   return (
@@ -232,7 +233,7 @@ function Rescore({ rulesId }: { rulesId: number }) {
   }, [rulesId]);
 
   async function run() {
-    if (!window.confirm("Пересчитать очки всех сыгранных турниров по текущим правилам? Старые очки заменятся.")) return;
+    if (!(await askConfirm("Пересчитать очки всех сыгранных турниров по текущим правилам? Старые очки заменятся.", "Пересчитать"))) return;
     setBusy(true);
     const res = await fetch("/api/rating/rescore", { method: "POST" });
     const data = await res.json();
@@ -684,7 +685,7 @@ function ClosedPeriod({ id, onBack }: { id: number; onBack: () => void }) {
   }, [load]);
 
   async function run(body: unknown, confirmText?: string) {
-    if (confirmText && !window.confirm(confirmText)) return;
+    if (confirmText && !(await askConfirm(confirmText))) return;
     setBusy(true);
     setError("");
     try {
