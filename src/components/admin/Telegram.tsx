@@ -4,7 +4,7 @@
 // кнопки «Отправить итоги игрокам» и «Отправить финалистам», роль в боте в карточке игрока.
 
 import { useCallback, useEffect, useState } from "react";
-import { Button, Card, Field, inputClass } from "./ui";
+import { Button, Card, ConfirmButton, Field, inputClass } from "./ui";
 
 async function post(body: Record<string, unknown>) {
   const res = await fetch("/api/telegram", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -83,20 +83,22 @@ export function TelegramCard() {
       <div className="mt-4 border-t border-white/[0.07] pt-3">
         <div className="mb-1 text-sm text-slate-300">Анонс всем, кто подключил бота (только владелец)</div>
         <textarea className={`${inputClass} min-h-24`} maxLength={3500} value={text} onChange={(e) => setText(e.target.value)} placeholder="В субботу большой турнир — запись уже открыта!" />
-        <Button
-          className="mt-2"
-          variant="primary"
-          disabled={busy || !text.trim()}
-          onClick={() =>
-            window.confirm(`Отправить анонс ${status.linked} игрокам? Отменить отправку будет нельзя.`) &&
-            run({ action: "announce", text }, (d) => {
-              setText("");
-              return `Анонс отправляется: ${d.to} получателей`;
-            })
-          }
-        >
-          Отправить анонс
-        </Button>
+        <div className="mt-2 flex">
+          <ConfirmButton
+            variant="primary"
+            disabled={busy || !text.trim()}
+            question={`Отправить анонс ${status.linked} игрокам? Отменить отправку будет нельзя.`}
+            yes="Отправить"
+            onConfirm={() =>
+              run({ action: "announce", text }, (d) => {
+                setText("");
+                return `Анонс отправляется: ${d.to} получателей`;
+              })
+            }
+          >
+            Отправить анонс
+          </ConfirmButton>
+        </div>
       </div>
       {error && <div className="mt-2 text-sm text-red-300">{error}</div>}
       {flash && <div className="mt-2 text-sm text-emerald-300">{flash}</div>}

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 
 export function Card({
   title,
@@ -50,6 +50,55 @@ export function Button({
       {...props}
       className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm lg:min-h-0 transition disabled:cursor-not-allowed disabled:opacity-40 ${VARIANTS[variant]} ${className}`}
     />
+  );
+}
+
+/**
+ * Кнопка с подтверждением прямо на странице: первое нажатие спрашивает «Точно?» и показывает «Да» / «Нет».
+ * Вместо окна браузера window.confirm — во встроенных браузерах (например, в приложении Claude) его не видно.
+ */
+export function ConfirmButton({
+  question,
+  yes = "Да",
+  onConfirm,
+  variant = "default",
+  disabled,
+  children,
+  className = "",
+}: {
+  question: ReactNode;
+  yes?: string;
+  onConfirm: () => void;
+  variant?: Variant;
+  disabled?: boolean;
+  children: ReactNode;
+  className?: string;
+}) {
+  const [asking, setAsking] = useState(false);
+  if (!asking) {
+    return (
+      <Button variant={variant} disabled={disabled} className={className} onClick={() => setAsking(true)}>
+        {children}
+      </Button>
+    );
+  }
+  return (
+    <span className="inline-flex basis-full flex-wrap items-center gap-2 rounded-lg border border-amber-300/40 bg-amber-300/[0.08] px-3 py-2 text-sm text-amber-100">
+      <span className="min-w-0 flex-1 basis-48">{question}</span>
+      <Button
+        variant="primary"
+        disabled={disabled}
+        onClick={() => {
+          setAsking(false);
+          onConfirm();
+        }}
+      >
+        {yes}
+      </Button>
+      <Button variant="ghost" onClick={() => setAsking(false)}>
+        Нет
+      </Button>
+    </span>
   );
 }
 

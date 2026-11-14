@@ -8,7 +8,7 @@ import { FINALIST_MESSAGE_MAX, type AccountRequest } from "@/lib/account";
 import { formatPhone, type Player } from "@/lib/players";
 import { Avatar, fileToJpeg, refreshPhotos } from "@/components/site/Avatar";
 import { TelegramRole, TelegramSend } from "./Telegram";
-import { Button, Card, inputClass } from "./ui";
+import { Button, Card, ConfirmButton, inputClass } from "./ui";
 
 async function post(body: Record<string, unknown>) {
   const res = await fetch("/api/accounts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -88,13 +88,15 @@ export function AccountRequests({ players, onChange }: { players: Player[]; onCh
                 <Button variant="primary" disabled={busy} onClick={() => act({ action: "confirm", id: r.id, playerId: picked || null }, `Заявка «${r.name}» подтверждена`)}>
                   Подтвердить
                 </Button>
-                <Button
+                <ConfirmButton
                   variant="ghost"
                   disabled={busy}
-                  onClick={() => window.confirm(`Отклонить заявку «${r.name}»? Она будет удалена.`) && act({ action: "reject", id: r.id }, `Заявка «${r.name}» отклонена`)}
+                  question={`Отклонить заявку «${r.name}»? Она будет удалена.`}
+                  yes="Отклонить"
+                  onConfirm={() => act({ action: "reject", id: r.id }, `Заявка «${r.name}» отклонена`)}
                 >
                   Отклонить
-                </Button>
+                </ConfirmButton>
               </div>
             </div>
           );
@@ -170,22 +172,23 @@ export function PlayerAccount({ playerId, name }: { playerId: number; name: stri
               Вход на сайт есть: логин <span className="tabular-nums">{formatPhone(state.account.phone)}</span>
             </div>
             <div className="mt-2 flex flex-wrap gap-2">
-              <Button
+              <ConfirmButton
                 disabled={busy}
-                onClick={() => window.confirm(`Сбросить пароль игрока «${name}»? Старый пароль перестанет работать.`) && act(async () => ({ action: "resetPassword" }))}
+                question={`Сбросить пароль игрока «${name}»? Старый пароль перестанет работать.`}
+                yes="Сбросить"
+                onConfirm={() => act(async () => ({ action: "resetPassword" }))}
               >
                 Сбросить пароль
-              </Button>
-              <Button
+              </ConfirmButton>
+              <ConfirmButton
                 variant="ghost"
                 disabled={busy}
-                onClick={() =>
-                  window.confirm(`Отключить вход игрока «${name}» на сайт? Сам игрок и его история останутся, зарегистрироваться можно будет заново.`) &&
-                  act(async () => ({ action: "removeAccount" }))
-                }
+                question={`Отключить вход игрока «${name}» на сайт? Сам игрок и его история останутся, зарегистрироваться можно будет заново.`}
+                yes="Отключить"
+                onConfirm={() => act(async () => ({ action: "removeAccount" }))}
               >
                 Отключить вход
-              </Button>
+              </ConfirmButton>
             </div>
             {password && (
               <div className="mt-3 rounded-lg border border-amber-300/40 bg-amber-300/[0.08] p-3">
