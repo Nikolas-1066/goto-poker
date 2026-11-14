@@ -162,3 +162,19 @@ export function formatRub(n: number) {
 }
 
 export const hasPrices = (p: Prices | undefined) => !!p && (p.entry > 0 || p.reentry > 0 || p.addon > 0 || p.doubleAddon > 0);
+
+// ---------- Бонус «приведи друга» (docs/SITE.md, шаг 4) ----------
+
+export const FRIEND_BONUS_LABEL: Record<NonNullable<Prices["friendBonus"]>, string> = { reentry: "бесплатный ребай", addon: "бесплатный аддон" };
+
+/** Сколько бонусов положено игроку: привёл `brought` новичков; один на турнир или за каждого — по структуре */
+export function friendBonusAllowed(prices: Prices | undefined, brought: number): number {
+  if (!prices?.friendBonus || brought <= 0) return 0;
+  return prices.friendBonusEach ? brought : 1;
+}
+
+/** «Привёл друга — бесплатный ребай (за каждого)» — подпись в структуре и в турнире; пусто — бонуса нет */
+export function friendBonusText(prices: Prices | undefined): string {
+  if (!prices?.friendBonus) return "";
+  return `привёл новичка — ${FRIEND_BONUS_LABEL[prices.friendBonus]}${prices.friendBonusEach ? " за каждого" : ""}`;
+}

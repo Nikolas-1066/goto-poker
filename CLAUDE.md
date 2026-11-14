@@ -83,6 +83,7 @@ Telegram Mini App для игроков. Архитектуру делать т�
 - Запись на турниры (`docs/SITE.md`, шаг 4 Этапа 3): гости +1…+3, лимит и лист ожидания (строгая очередь), отмена в любой момент,
   запись админом, перенос записанных в открытый турнир. Чистые функции `src/lib/signup.ts`, база `src/lib/db/signups.ts`
   (миграция 9), API `/api/signup`; UI `src/components/site/Signup.tsx` (карточка турнира, «Мои записи»), админка `Signups.tsx`.
+  Бонус «приведи друга»: `Prices.friendBonus` в структуре, `setBroughtBy` и `friendInfo` в `tournament.ts`, блок «Новички» в `TournamentPlayers.tsx`.
 - Отчёт владельцу после турнира: `src/lib/report.ts` (сдвиг мест, текст), `src/lib/db/report.ts`, `/api/report`;
   UI `src/components/admin/Report.tsx` (текст + «Скопировать» работает и по http, напоминание до копирования)
   и `ReportImages.tsx` (3 картинки на canvas без кассы). В карточке «Игроки» после завершения и в «Истории».

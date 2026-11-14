@@ -170,6 +170,7 @@ export function sanitizePrices(input: unknown): Prices {
     addon: rub(p.addon),
     doubleAddon: rub(p.doubleAddon),
     ...(free ? { freeEntryUntil: free } : {}),
+    ...(p.friendBonus === "reentry" || p.friendBonus === "addon" ? { friendBonus: p.friendBonus, ...(p.friendBonusEach ? { friendBonusEach: true } : {}) } : {}),
   };
 }
 

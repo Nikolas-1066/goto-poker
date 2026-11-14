@@ -12,6 +12,7 @@ import {
   applyPlayerAction,
   archiveCurrentIfUsed,
   currentTournament,
+  friendInfo,
   listParticipants,
   NeedsForceError,
   resetParticipants,
@@ -665,5 +666,78 @@ describe("касса (docs/CASH.md)", () => {
     addPayment(db, { tournamentId: old, playerId: ira, amount: 600, method: "card" }, T0 + 14_000);
     expect(playerDebts(db, ira).debts).toEqual([]);
     expect(byName("Ира").oldDebts).toEqual([]);
+  });
+});
+
+describe("бонус «приведи друга»", () => {
+  const PRICES = { entry: 800, reentry: 800, addon: 800, doubleAddon: 1200 };
+  const tid = () => currentTournament(db).id;
+  const charges = (name: string) => tournamentCash(db, tid()).players.get(byName(name).playerId)!;
+  /** У игрока уже есть сыгранный турнир — он не новичок */
+  const played = (playerId: number) => {
+    const old = Number(db.prepare("INSERT INTO tournaments (name, mode, status, created_at, updated_at) VALUES ('Старый', 'players', 'finished', 1, 1)").run().lastInsertRowid);
+    db.prepare("INSERT INTO participants (tournament_id, player_id, status, registered_at, place, entries) VALUES (?, ?, 'busted', 1, 1, 1)").run(old, playerId);
+  };
+  const enterAll = () => {
+    for (const id of [sasha, ira, oleg]) player({ type: "enter", playerId: id }, T0);
+    clock({ type: "start" }, T0);
+  };
+  const info = () => friendInfo(db, tid(), state.tournament.structure?.prices);
+
+  it("привёл новичка — один бесплатный ребай на эту игру; второй ребай платный", () => {
+    clock({ type: "setPrices", prices: { ...PRICES, friendBonus: "reentry" } }, T0);
+    played(sasha);
+    enterAll();
+    expect(info()[byName("Саша").id]).toMatchObject({ newcomer: false, brought: 0, left: 0 });
+    expect(info()[byName("Олег").id].newcomer).toBe(true);
+
+    player({ type: "setBroughtBy", participantId: byName("Олег").id, by: byName("Саша").id }, T0 + 1000);
+    player({ type: "setBroughtBy", participantId: byName("Ира").id, by: byName("Саша").id }, T0 + 1000);
+    expect(info()[byName("Саша").id]).toMatchObject({ brought: 2, allowed: 1, left: 1 });
+
+    bust(byName("Саша").id, T0 + 2000, byName("Ира").id);
+    player({ type: "reentry", participantId: byName("Саша").id }, T0 + 3000);
+    expect(lastResult!.message).toContain("бесплатно: привёл новичка");
+    expect(info()[byName("Саша").id].left).toBe(0);
+    bust(byName("Саша").id, T0 + 4000, byName("Ира").id);
+    player({ type: "reentry", participantId: byName("Саша").id }, T0 + 5000);
+    expect(lastResult!.message).not.toContain("бесплатно");
+    expect(charges("Саша").charged).toBe(800 + 800); // вход и второй ребай; первый ребай — бесплатно
+  });
+
+  it("«за каждого» — по бонусу за каждого новичка; отменили бесплатный ребай — бонус вернулся", () => {
+    clock({ type: "setPrices", prices: { ...PRICES, friendBonus: "reentry", friendBonusEach: true } }, T0);
+    played(sasha);
+    enterAll();
+    for (const n of ["Олег", "Ира"]) player({ type: "setBroughtBy", participantId: byName(n).id, by: byName("Саша").id }, T0 + 1000);
+    expect(info()[byName("Саша").id]).toMatchObject({ brought: 2, allowed: 2, left: 2 });
+    bust(byName("Саша").id, T0 + 2000, byName("Ира").id);
+    player({ type: "reentry", participantId: byName("Саша").id }, T0 + 3000);
+    expect(info()[byName("Саша").id].left).toBe(1);
+    player({ type: "cancel", eventId: lastResult!.undoEventId! }, T0 + 4000);
+    expect(info()[byName("Саша").id].left).toBe(2);
+  });
+
+  it("бонус «аддон» не делает бесплатным ребай; постоянного игрока привести нельзя; сам себя — тоже", () => {
+    clock({ type: "setPrices", prices: { ...PRICES, friendBonus: "addon" } }, T0);
+    played(sasha);
+    enterAll();
+    expect(() => player({ type: "setBroughtBy", participantId: byName("Саша").id, by: byName("Ира").id })).toThrow("бонус только за новичка");
+    expect(() => player({ type: "setBroughtBy", participantId: byName("Олег").id, by: byName("Олег").id })).toThrow("сам себя");
+    player({ type: "setBroughtBy", participantId: byName("Олег").id, by: byName("Саша").id }, T0 + 1000);
+    bust(byName("Саша").id, T0 + 2000, byName("Ира").id);
+    player({ type: "reentry", participantId: byName("Саша").id }, T0 + 3000);
+    expect(lastResult!.message).not.toContain("бесплатно");
+    player({ type: "setBroughtBy", participantId: byName("Олег").id, by: null }, T0 + 4000);
+    expect(info()[byName("Саша").id]).toMatchObject({ brought: 0, left: 0 });
+  });
+
+  it("в структуре бонуса нет — ничего не меняется", () => {
+    clock({ type: "setPrices", prices: PRICES }, T0);
+    enterAll();
+    player({ type: "setBroughtBy", participantId: byName("Олег").id, by: byName("Саша").id }, T0 + 1000);
+    bust(byName("Саша").id, T0 + 2000, byName("Ира").id);
+    player({ type: "reentry", participantId: byName("Саша").id }, T0 + 3000);
+    expect(lastResult!.message).not.toContain("бесплатно");
   });
 });

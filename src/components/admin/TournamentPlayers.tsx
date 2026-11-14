@@ -4,8 +4,8 @@
 // Списки обновляются, когда меняется турнир (updatedAt) — значит, видно и действия с другого телефона.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ParticipantView, PlayerAction, finalInfo } from "@/lib/db/tournament";
-import { debtWarning, formatRub, type CashSummary, type PayMethod } from "@/lib/cash";
+import type { FriendInfo, ParticipantView, PlayerAction, finalInfo } from "@/lib/db/tournament";
+import { debtWarning, formatRub, friendBonusText, type CashSummary, type PayMethod } from "@/lib/cash";
 import { formatEloDelta } from "@/lib/rating/elo";
 import { formatPlace } from "@/lib/results";
 import { phoneTail, searchPlayers, type Player } from "@/lib/players";
@@ -52,6 +52,8 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
   const [seating, setSeating] = useState<SeatingSettings>(DEFAULT_SEATING);
   /** Кто записался на сайте с гостями: { [playerId]: { guests, guestNames } } — видно, что прийти должен не один */
   const [guests, setGuests] = useState<Record<number, { guests: number; guestNames: string[] }>>({});
+  /** Бонус «приведи друга» по участникам (null — в структуре бонуса нет) */
+  const [friends, setFriends] = useState<Record<number, FriendInfo> | null>(null);
   const [view, setView] = useState<"list" | "tables">("list");
   useEffect(() => {
     try {
@@ -140,6 +142,7 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
       setCashSummary(data.cash ?? null);
       if (data.seating) setSeating(data.seating);
       setGuests(data.guests ?? {});
+      setFriends(data.friends ?? null);
     }
     else setError(data.error ?? "Не удалось загрузить участников");
   }, []);
@@ -439,6 +442,16 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
         </Section>
       )}
 
+      {!finished && friends && (
+        <FriendBonus
+          entered={[...playing, ...busted]}
+          friends={friends}
+          label={friendBonusText(tournament.structure?.prices)}
+          busy={busy}
+          onSet={(participantId, by) => act({ type: "setBroughtBy", participantId, by })}
+        />
+      )}
+
       {!finished && (
         <Section title={`В игре · ${playing.length}`}>
           {playing.length === 0 && <div className="py-3 text-sm text-slate-500">Пока никого. Найдите игрока выше и нажмите «Пришёл».</div>}
@@ -563,6 +576,55 @@ function Stat({ label, value }: { label: string; value: number }) {
       <div className="text-xl font-black tabular-nums">{value}</div>
       <div className="text-[10px] uppercase tracking-wide text-slate-500">{label}</div>
     </div>
+  );
+}
+
+/** «Приведи друга»: у новичка указывают, кто его привёл; приведшему на эту игру полагается бесплатный ребай или аддон */
+function FriendBonus({
+  entered,
+  friends,
+  label,
+  busy,
+  onSet,
+}: {
+  entered: ParticipantView[];
+  friends: Record<number, FriendInfo>;
+  label: string;
+  busy: boolean;
+  onSet: (participantId: number, by: number | null) => void;
+}) {
+  const newcomers = entered.filter((p) => friends[p.id]?.newcomer);
+  const inviters = entered.filter((p) => (friends[p.id]?.brought ?? 0) > 0);
+  if (!newcomers.length) return null;
+  return (
+    <Section title={`Новички · ${newcomers.length} — ${label}`}>
+      {newcomers.map((p) => (
+        <div key={p.id} className="flex flex-wrap items-center gap-2 py-2 text-sm">
+          <span className="min-w-0 flex-1 basis-32 truncate font-semibold">{p.name}</span>
+          <select
+            className={`${inputClass} w-auto max-w-full`}
+            disabled={busy}
+            value={friends[p.id].broughtBy ?? ""}
+            onChange={(e) => onSet(p.id, e.target.value ? Number(e.target.value) : null)}
+            aria-label={`Кто привёл: ${p.name}`}
+          >
+            <option value="">Пришёл сам</option>
+            {entered
+              .filter((o) => o.id !== p.id)
+              .map((o) => (
+                <option key={o.id} value={o.id}>
+                  Привёл(а): {o.name}
+                </option>
+              ))}
+          </select>
+        </div>
+      ))}
+      {inviters.map((p) => (
+        <div key={`b${p.id}`} className="py-2 text-sm text-emerald-300">
+          {p.name}: привёл(а) {friends[p.id].brought} — бонусов осталось {friends[p.id].left} из {friends[p.id].allowed}
+        </div>
+      ))}
+    </Section>
   );
 }
 

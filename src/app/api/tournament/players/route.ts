@@ -7,6 +7,7 @@ import {
   applyPlayerAction,
   currentTournament,
   finalInfo,
+  friendInfo,
   listParticipants,
   NeedsForceError,
   type PlayerAction,
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
   try {
     if (!(await hasDatabase())) return badRequest(NO_DB);
     const { tournament } = await readDb();
-    const { participants, final, cash, seating, guests } = await withDatabase((db) => {
+    const { participants, final, cash, seating, guests, friends } = await withDatabase((db) => {
       const id = currentTournament(db).id;
       return {
         participants: listParticipants(db, id, tournament.status === "finished"),
@@ -31,10 +32,11 @@ export async function GET(req: NextRequest) {
         cash: tournamentCash(db, id).summary,
         seating: getSeating(db),
         guests: guestsOfTournament(db, id),
+        friends: tournament.structure?.prices.friendBonus ? friendInfo(db, id, tournament.structure.prices) : null,
       };
     });
     return Response.json(
-      { mode: tournament.mode, updatedAt: tournament.updatedAt, participants, final, cash, seating, guests },
+      { mode: tournament.mode, updatedAt: tournament.updatedAt, participants, final, cash, seating, guests, friends },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (err) {

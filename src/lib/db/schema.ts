@@ -315,4 +315,9 @@ export const MIGRATIONS: string[] = [
   CREATE INDEX signups_schedule ON signups (schedule_id);
   ALTER TABLE participants ADD COLUMN brought_by INTEGER REFERENCES participants (id);
   `,
+  // 10 — бонус «приведи друга»: events.bonus = 'friend' — ребай или аддон стал бесплатным по этому бонусу
+  // (чтобы не путать с «бесплатно», которое админ поставил вручную).
+  `
+  ALTER TABLE events ADD COLUMN bonus TEXT;
+  `,
 ];

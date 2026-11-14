@@ -341,6 +341,32 @@ function PresetForm({
               onChange={(e) => set({ prices: { ...draft.prices, freeEntryUntil: e.target.value } })}
             />
           </Field>
+          <Field label="Бонус «приведи друга»">
+            <select
+              className={inputClass}
+              value={draft.prices.friendBonus ?? ""}
+              onChange={(e) => {
+                const v = e.target.value;
+                set({ prices: { ...draft.prices, friendBonus: v === "reentry" || v === "addon" ? v : undefined } });
+              }}
+            >
+              <option value="">Нет бонуса</option>
+              <option value="reentry">Бесплатный ребай</option>
+              <option value="addon">Бесплатный аддон</option>
+            </select>
+          </Field>
+          {draft.prices.friendBonus && (
+            <Field label="Привёл нескольких новичков">
+              <select
+                className={inputClass}
+                value={draft.prices.friendBonusEach ? "each" : "once"}
+                onChange={(e) => set({ prices: { ...draft.prices, friendBonusEach: e.target.value === "each" } })}
+              >
+                <option value="once">Один бонус на турнир</option>
+                <option value="each">По бонусу за каждого</option>
+              </select>
+            </Field>
+          )}
         </div>
         <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
           <Field label="Ребаи до конца уровня (0 — нет)">

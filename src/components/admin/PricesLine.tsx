@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { formatRub, hasPrices } from "@/lib/cash";
+import { formatRub, friendBonusText, hasPrices } from "@/lib/cash";
 import type { Prices } from "@/lib/types";
 import { Button, Field, inputClass } from "./ui";
 
-const FIELDS: { key: Exclude<keyof Prices, "freeEntryUntil">; label: string; short: string }[] = [
+type PriceKey = "entry" | "reentry" | "addon" | "doubleAddon";
+const FIELDS: { key: PriceKey; label: string; short: string }[] = [
   { key: "entry", label: "Вход, ₽", short: "вход" },
   { key: "reentry", label: "Re-entry, ₽", short: "re-entry" },
   { key: "addon", label: "Аддон, ₽", short: "аддон" },
@@ -51,7 +52,9 @@ export function PricesLine({ prices, onSave }: { prices: Prices; onSave: (prices
             variant="primary"
             onClick={() => {
               onSave({
-                ...(Object.fromEntries(FIELDS.map((f) => [f.key, Number(draft[f.key]) || 0])) as Omit<Prices, "freeEntryUntil">),
+                // бонус «приведи друга» задаётся в структуре — здесь он просто сохраняется как был
+                ...prices,
+                ...(Object.fromEntries(FIELDS.map((f) => [f.key, Number(draft[f.key]) || 0])) as Record<PriceKey, number>),
                 freeEntryUntil: freeUntil,
               });
               setEditing(false);
@@ -80,6 +83,7 @@ export function PricesLine({ prices, onSave }: { prices: Prices; onSave: (prices
             {prices.freeEntryUntil && (
               <span className="ml-1 font-semibold text-emerald-300">· вход бесплатный до {prices.freeEntryUntil}</span>
             )}
+            {friendBonusText(prices) && <span className="ml-1 font-semibold text-emerald-300">· {friendBonusText(prices)}</span>}
           </>
         )}
       </div>

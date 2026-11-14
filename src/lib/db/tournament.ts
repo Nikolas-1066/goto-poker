@@ -6,6 +6,7 @@ import {
   CHARGE_LABEL,
   cashByPlayer,
   formatRub,
+  friendBonusAllowed,
   isFreeEntryTime,
   PAY_METHOD_LABEL,
   priceOf,
@@ -25,7 +26,7 @@ import {
   type EventType,
   type JournalEvent,
 } from "../results";
-import type { Db, Tournament, TournamentMode } from "../types";
+import type { Db, Prices, Tournament, TournamentMode } from "../types";
 import { KIND_LABEL, type TournamentKind } from "../rating/points";
 import {
   addPayment,
@@ -124,6 +125,8 @@ export type PlayerAction =
   /** Завершить турнир. Если в игре несколько (дил) — dealOrder: их порядок по местам */
   | { type: "finish"; dealOrder?: number[] }
   | { type: "setMode"; mode: TournamentMode }
+  /** «Приведи друга»: отметить, кто привёл этого новичка (by = null — пришёл сам) */
+  | { type: "setBroughtBy"; participantId: number; by: number | null }
   /** Касса: отметить вход / re-entry / аддон бесплатным или снять отметку */
   | { type: "setFree"; eventId: number; free: boolean }
   /**
@@ -334,6 +337,64 @@ function participantOf(db: DatabaseSync, tournamentId: number, participantId: nu
   return row;
 }
 
+// ---------- Бонус «приведи друга» ----------
+
+/** Новичок — в других турнирах клуба ещё не играл */
+function isNewcomer(db: DatabaseSync, tournamentId: number, playerId: number) {
+  return !db
+    .prepare(
+      `SELECT 1 FROM participants p
+       WHERE p.player_id = ? AND p.tournament_id <> ?
+         AND (p.place IS NOT NULL OR EXISTS (SELECT 1 FROM events e WHERE e.participant_id = p.id AND e.type = 'entry' AND e.cancelled_at IS NULL))
+       LIMIT 1`,
+    )
+    .get(playerId, tournamentId);
+}
+
+/** Сколько новичков привёл участник (считаются только те, кто вошёл в турнир) и сколько бонусов уже использовал */
+function friendCounts(db: DatabaseSync, tournamentId: number, participantId: number) {
+  const r = db
+    .prepare(
+      `SELECT (SELECT COUNT(*) FROM participants n WHERE n.tournament_id = ?1 AND n.brought_by = ?2
+                 AND EXISTS (SELECT 1 FROM events e WHERE e.participant_id = n.id AND e.type = 'entry' AND e.cancelled_at IS NULL)) AS brought,
+              (SELECT COUNT(*) FROM events e WHERE e.participant_id = ?2 AND e.bonus = 'friend' AND e.free = 1 AND e.cancelled_at IS NULL) AS used`,
+    )
+    .get(tournamentId, participantId) as { brought: number; used: number };
+  return r;
+}
+
+function friendBonusLeft(db: DatabaseSync, tournamentId: number, participantId: number, prices: Prices | undefined) {
+  const c = friendCounts(db, tournamentId, participantId);
+  return Math.max(0, friendBonusAllowed(prices, c.brought) - c.used);
+}
+
+export type FriendInfo = {
+  /** Новичок (раньше не играл) — ему можно указать, кто его привёл */
+  newcomer: boolean;
+  /** Кто привёл (участник турнира) */
+  broughtBy: number | null;
+  /** Сколько новичков привёл сам, сколько бонусов положено и осталось */
+  brought: number;
+  allowed: number;
+  left: number;
+};
+
+/** «Приведи друга» по всем участникам турнира — для админки: { [participantId]: … } */
+export function friendInfo(db: DatabaseSync, tournamentId: number, prices: Prices | undefined): Record<number, FriendInfo> {
+  const rows = db.prepare("SELECT id, player_id, brought_by FROM participants WHERE tournament_id = ?").all(tournamentId) as {
+    id: number;
+    player_id: number;
+    brought_by: number | null;
+  }[];
+  return Object.fromEntries(
+    rows.map((r) => {
+      const c = friendCounts(db, tournamentId, r.id);
+      const allowed = friendBonusAllowed(prices, c.brought);
+      return [r.id, { newcomer: isNewcomer(db, tournamentId, r.player_id), broughtBy: r.brought_by, brought: c.brought, allowed, left: Math.max(0, allowed - c.used) }];
+    }),
+  );
+}
+
 /** Ошибка проверки → обычная или «можно подтвердить» */
 function fail(message: string | null, canForce: boolean) {
   if (!message) return;
@@ -417,6 +478,13 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
   let message = "";
   let undoEventId: number | null = null;
   let seated: Seat | null | undefined;
+  // бонус «приведи друга»: ребай или аддон бесплатно, пока бонусы не израсходованы
+  const friendBonus = (participantId: number, type: "reentry" | "addon", eventId: number) => {
+    const prices = t.structure?.prices;
+    if (prices?.friendBonus !== type || friendBonusLeft(db, cur.id, participantId, prices) <= 0) return "";
+    db.prepare("UPDATE events SET free = 1, bonus = 'friend' WHERE id = ?").run(eventId);
+    return " · бесплатно: привёл новичка";
+  };
 
   if (t.status === "finished" && action.type !== "setMode" && !CASH_ACTIONS.has(action.type)) {
     throw new Error("Турнир завершён. Исправить итоги можно в «Истории»");
@@ -494,6 +562,7 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
       fail(check({ type: "reentry", participantId: p.id }, { reentryOpen: ctx.reentryOpen }), true);
       undoEventId = addEvent(p.id, "reentry");
       message = `${name(p.id)} — re-entry`;
+      message += friendBonus(p.id, "reentry", undoEventId);
       seated = seatOnEntry(p.id, true);
       message += seatText(seated);
       break;
@@ -504,6 +573,7 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
       fail(check({ type: action.type, participantId: p.id }, { addonOpen: ctx.addonOpen }), true);
       undoEventId = addEvent(p.id, action.type);
       message = `${name(p.id)} — ${action.type === "addon" ? "аддон" : "двойной аддон"}`;
+      if (action.type === "addon") message += friendBonus(p.id, "addon", undoEventId);
       break;
     }
     case "bust": {
@@ -704,6 +774,18 @@ export function applyPlayerAction(db: DatabaseSync, next: Db, action: PlayerActi
       t.mode = action.mode;
       message = action.mode === "players" ? "Учёт по игрокам" : "Учёт вручную";
       audit(db, "tournament.mode", { tournamentId: cur.id, mode: action.mode }, now);
+      break;
+    }
+    case "setBroughtBy": {
+      const p = participantOf(db, cur.id, action.participantId);
+      if (action.by != null) {
+        if (Number(action.by) === p.id) throw new Error("Игрок не может привести сам себя");
+        participantOf(db, cur.id, Number(action.by));
+        if (!isNewcomer(db, cur.id, p.player_id)) throw new Error(`${name(p.id)} уже играл(а) в клубе — бонус только за новичка`);
+      }
+      db.prepare("UPDATE participants SET brought_by = ? WHERE id = ?").run(action.by == null ? null : Number(action.by), p.id);
+      audit(db, "tournament.broughtBy", { tournamentId: cur.id, participantId: p.id, by: action.by ?? null }, now);
+      message = action.by == null ? `${name(p.id)} — пришёл сам` : `${name(p.id)} — привёл(а) ${name(Number(action.by))}`;
       break;
     }
     case "setFree": {
