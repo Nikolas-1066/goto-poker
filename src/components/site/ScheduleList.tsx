@@ -6,6 +6,8 @@ import { formatRub } from "@/lib/cash";
 import { formatChips } from "@/lib/clock";
 import { dayHint, formatDay } from "@/lib/schedule";
 import type { SiteScheduleItem } from "@/lib/site";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { SignupBox } from "./Signup";
 import { Muted, useSite } from "./SiteShell";
@@ -14,6 +16,7 @@ import { Muted, useSite } from "./SiteShell";
 export function ScheduleList({ limit, hideStarted = false }: { limit?: number; hideStarted?: boolean }) {
   // после записи или отмены расписание перечитывается (список записавшихся и свободные места)
   const [version, setVersion] = useState(0);
+  const router = useRouter();
   const { data, error, loading } = useSite<{ today: string; items: SiteScheduleItem[] }>(`schedule&v=${version}`, 60_000, true);
   if (!data) return <Muted>{loading ? "Загрузка…" : error || "Расписание скоро появится"}</Muted>;
   const all = hideStarted ? data.items.filter((it) => !it.started) : data.items;
@@ -31,7 +34,11 @@ export function ScheduleList({ limit, hideStarted = false }: { limit?: number; h
         return (
           <article
             key={it.id}
-            className="flex flex-col rounded-2xl border border-white/[0.08] bg-[#0f1822]/90 p-5 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.9)] transition hover:border-amber-300/40"
+            // нажатие на карточку открывает страницу турнира; кнопки и ссылки внутри работают как обычно
+            onClick={(e) => {
+              if (!(e.target as HTMLElement).closest("a, button, input, textarea, select, label")) router.push(`/schedule/${it.id}`);
+            }}
+            className="flex cursor-pointer flex-col rounded-2xl border border-white/[0.08] bg-[#0f1822]/90 p-5 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.9)] transition hover:border-amber-300/40"
           >
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -44,7 +51,11 @@ export function ScheduleList({ limit, hideStarted = false }: { limit?: number; h
                 <span className="rounded-full bg-amber-300/15 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-amber-300">{hint}</span>
               ) : null}
             </div>
-            <h3 className="mt-3 text-xl font-bold leading-tight">{it.name}</h3>
+            <h3 className="mt-3 text-xl font-bold leading-tight">
+              <Link href={`/schedule/${it.id}`} className="hover:text-amber-200">
+                {it.name}
+              </Link>
+            </h3>
             {it.note && <p className="mt-1 text-sm text-slate-300">{it.note}</p>}
             {facts.length > 0 && (
               <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-white/[0.07] pt-3">
@@ -57,7 +68,10 @@ export function ScheduleList({ limit, hideStarted = false }: { limit?: number; h
               </dl>
             )}
             <div className="mt-auto">
-              <SignupBox scheduleId={it.id} signups={it.signups} onChange={() => setVersion((v) => v + 1)} />
+              <SignupBox scheduleId={it.id} signups={it.signups} href={`/schedule/${it.id}`} onChange={() => setVersion((v) => v + 1)} />
+              <Link href={`/schedule/${it.id}`} className="mt-3 block text-center text-xs text-slate-500 hover:text-amber-200">
+                Подробнее о турнире →
+              </Link>
             </div>
           </article>
         );

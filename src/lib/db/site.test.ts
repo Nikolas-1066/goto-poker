@@ -7,7 +7,7 @@ import { closePeriod, openPeriod, startPeriod } from "./periods";
 import { createPlayer } from "./players";
 import { addItem, setCancelled } from "./schedule";
 import { applyAction } from "../clock";
-import { getAbout, saveAbout, siteArchive, siteFacts, siteLive, sitePlayer, siteRating, siteResultFull, siteResults, siteSchedule } from "./site";
+import { getAbout, saveAbout, siteArchive, siteEvent, siteFacts, siteLive, sitePlayer, siteRating, siteResultFull, siteResults, siteSchedule } from "./site";
 import { loadState, openStore, transaction, writeState } from "./sqlite";
 import { applyPlayerAction, currentTournament, listParticipants, type PlayerAction } from "./tournament";
 
@@ -218,6 +218,27 @@ describe("расписание на сайте", () => {
         signups: { going: [], waiting: [], seats: 0, free: 27, open: true },
       },
     ]);
+  });
+});
+
+describe("страница турнира", () => {
+  it("всё с карточки, плюс описание, структура, цены и адрес клуба; прошедший и отменённый — нет", () => {
+    const preset = db.prepare("SELECT id FROM presets LIMIT 1").get() as { id: string };
+    db.prepare("UPDATE presets SET prices_json = ?, description = 'Турнир на вылет' WHERE id = ?").run(
+      JSON.stringify({ entry: 800, reentry: 700, addon: 600, doubleAddon: 1000, friendBonus: "reentry" }),
+      preset.id,
+    );
+    saveAbout(db, { address: "Воронеж, ул. Примерная, 1", how: "Вход со двора" }, NOW);
+    const it = addItem(db, { date: "2026-11-20", time: "19:00", name: "Пятничный", presetId: preset.id, seatLimit: 27, note: "Приходите пораньше" }, "2026-11-13", NOW);
+    const ev = siteEvent(db, it.id, NOW)!;
+    expect(ev).toMatchObject({ id: it.id, name: "Пятничный", note: "Приходите пораньше", seatLimit: 27, place: { address: "Воронеж, ул. Примерная, 1", how: "Вход со двора" } });
+    expect(ev.details).toMatchObject({ description: "Турнир на вылет", prices: { entry: 800, reentry: 700, addon: 600, doubleAddon: 1000 }, friendBonus: "привёл новичка — бесплатный ребай" });
+    expect(ev.details!.startingStack).toBeGreaterThan(0);
+    // note здесь — примечание к турниру для игроков; заметок о людях, телефонов и денег нет
+    expect(JSON.stringify(ev)).not.toMatch(/\+7900|секретная|phone|debt|paid/);
+    setCancelled(db, it.id, true, NOW);
+    expect(siteEvent(db, it.id, NOW)).toBeNull();
+    expect(siteEvent(db, 999, NOW)).toBeNull();
   });
 });
 

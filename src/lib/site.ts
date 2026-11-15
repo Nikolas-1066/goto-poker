@@ -91,6 +91,29 @@ export type SiteScheduleItem = {
   signups: SiteSignups;
 };
 
+/** Страница турнира из расписания: всё с карточки, плюс описание, структура, цены и где проходит */
+export type SiteEvent = SiteScheduleItem & {
+  details: {
+    /** Описание структуры (из пресета) */
+    description: string;
+    startingStack: number;
+    rebuyStack: number;
+    addonStack: number;
+    doubleAddonStack: number;
+    /** Ребай до конца уровня N (0 — ребаев нет) */
+    rebuyUntilLevel: number;
+    /** Аддон на перерыве после уровня N (0 — аддона нет) */
+    addonUntilLevel: number;
+    /** Длина первого уровня, минут */
+    levelMinutes: number | null;
+    prices: { entry: number; reentry: number; addon: number; doubleAddon: number };
+    /** «Привёл новичка — бесплатный ребай» или пусто */
+    friendBonus: string;
+  } | null;
+  /** Где проходит — из «О клубе» */
+  place: { address: string; how: string };
+};
+
 /** Цифры клуба для главной — считаются по базе, ничего не придумано */
 export type SiteFacts = { players: number; tournaments: number; finalistsN: number | null };
 

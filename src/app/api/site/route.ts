@@ -1,11 +1,11 @@
 import { connection, type NextRequest } from "next/server";
 import { badRequest, isAdmin, unauthorized } from "@/lib/auth";
 import { photoVersions } from "@/lib/db/accounts";
-import { getAbout, saveAbout, siteArchive, siteFacts, siteLive, sitePlayer, siteRating, siteResultFull, siteResults, siteSchedule } from "@/lib/db/site";
+import { getAbout, saveAbout, siteArchive, siteEvent, siteFacts, siteLive, sitePlayer, siteRating, siteResultFull, siteResults, siteSchedule } from "@/lib/db/site";
 import { withDatabase } from "@/lib/store";
 
 // Данные для сайта клуба (docs/SITE.md) — без пароля: только имена, места, очки, нокауты и ELO.
-// GET /api/site?get=rating | archive&id= | results&limit= | result&id= | live | player&id= | schedule | facts | photos | about
+// GET /api/site?get=rating | archive&id= | results&limit= | result&id= | live | player&id= | schedule | event&id= | facts | photos | about
 
 const json = (data: unknown, status = 200) => Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
 
@@ -40,6 +40,10 @@ export async function GET(req: NextRequest) {
       }
       case "schedule":
         return json(await withDatabase((db) => siteSchedule(db)));
+      case "event": {
+        const event = Number.isInteger(id) ? await withDatabase((db) => siteEvent(db, id)) : null;
+        return event ? json(event) : json({ error: "Турнир не найден — возможно, он уже прошёл или отменён" }, 404);
+      }
       case "facts":
         return json(await withDatabase((db) => siteFacts(db)));
       case "photos":

@@ -3,6 +3,7 @@
 // Каждое поле перечислено явно: новое поле в карточке игрока само на сайт не попадёт.
 
 import type { DatabaseSync } from "node:sqlite";
+import { friendBonusText } from "../cash";
 import { boardView } from "../clock";
 import { KIND_LABEL, type TournamentKind } from "../rating/points";
 import type { Standing } from "../rating/standings";
@@ -13,6 +14,7 @@ import {
   sanitizeAbout,
   type SiteAbout,
   type SiteArchive,
+  type SiteEvent,
   type SiteFacts,
   type SiteLive,
   type SitePeriod,
@@ -270,6 +272,34 @@ export function siteSchedule(db: DatabaseSync, now = Date.now()): { today: strin
       signups: siteSignups(db, it, now),
     }));
   return { today, items };
+}
+
+/** Страница турнира: только ближайшие (и сегодняшний открытый), без отменённых. null — нет такого или уже прошёл. */
+export function siteEvent(db: DatabaseSync, id: number, now = Date.now()): SiteEvent | null {
+  const item = siteSchedule(db, now).items.find((it) => it.id === id);
+  if (!item) return null;
+  const presetId = (db.prepare("SELECT preset_id FROM schedule WHERE id = ?").get(id) as { preset_id: string }).preset_id;
+  const p = loadState(db).presets.find((x) => x.id === presetId);
+  const about = getAbout(db);
+  const first = p?.steps.find((st) => st.kind === "level");
+  return {
+    ...item,
+    details: p
+      ? {
+          description: p.description ?? "",
+          startingStack: p.startingStack,
+          rebuyStack: p.rebuyStack,
+          addonStack: p.addonStack,
+          doubleAddonStack: p.doubleAddonStack ?? p.addonStack * 2,
+          rebuyUntilLevel: p.rebuyUntilLevel ?? 0,
+          addonUntilLevel: p.addonUntilLevel ?? 0,
+          levelMinutes: first && first.kind === "level" ? first.minutes : null,
+          prices: { entry: p.prices.entry, reentry: p.prices.reentry, addon: p.prices.addon, doubleAddon: p.prices.doubleAddon },
+          friendBonus: friendBonusText(p.prices),
+        }
+      : null,
+    place: { address: about.address, how: about.how },
+  };
 }
 
 // ---------- «О клубе» (settings, ключ «site_about») ----------
