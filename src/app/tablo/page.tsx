@@ -16,6 +16,16 @@ const BLINDS_UP_MS = 6000;
 /** Последние N мс уровня — красные пульсирующие цифры и тиканье */
 const FINAL_COUNTDOWN_MS = 10_000;
 
+/** Примерная ширина строки в «em»: цифры широкие, пробелы и «/» — уже */
+const textEm = (s: string) => [...s].reduce((w, ch) => w + (/\d/.test(ch) ? 0.62 : ch === "/" ? 0.45 : 0.3), 0);
+
+/**
+ * Размер шрифта, чтобы строка влезла в ширину своего блока: не больше max, но и не шире блока.
+ * Блок должен быть контейнером (класс @container) — cqw считается от его ширины.
+ * Иначе большие блайнды (10 000 / 20 000 / 20 000) упираются друг в друга и сливаются.
+ */
+const fitFont = (text: string, max: string, share = 0.9) => `min(${max}, ${((share * 100) / Math.max(1, textEm(text))).toFixed(2)}cqw)`;
+
 function Panel({
   children,
   className = "",
@@ -99,6 +109,10 @@ function Countdown({
     </div>
   );
 }
+
+/** «10 000 / 20 000 / 20 000» — для подбора размера шрифта */
+const blindsText = (l: { sb: number; bb: number; ante: number }) =>
+  [l.sb, l.bb, ...(l.ante > 0 ? [l.ante] : [])].map(formatChips).join(" / ");
 
 function BlindsLine({ level }: { level: { sb: number; bb: number; ante: number } }) {
   return (
@@ -411,7 +425,7 @@ function MainBoard({
                 <div className="tv-sm font-bold tracking-[0.3em] text-amber-300/90">
                   ТЕКУЩИЕ БЛАЙНДЫ
                 </div>
-                <div className={`mt-2 grid w-full gap-2 ${level.ante > 0 ? "grid-cols-3" : "grid-cols-2"}`}>
+                <div className={`mt-2 grid w-full divide-x divide-amber-300/20 ${level.ante > 0 ? "grid-cols-3" : "grid-cols-2"}`}>
                   <Blind label="МАЛЫЙ БЛАЙНД" value={formatChips(level.sb)} />
 
                   <Blind label="БОЛЬШОЙ БЛАЙНД" value={formatChips(level.bb)} />
@@ -430,8 +444,13 @@ function MainBoard({
                   СЛЕДУЮЩИЕ БЛАЙНДЫ
                 </div>
 
-                <div className="mt-3 flex items-center justify-center gap-2 whitespace-nowrap text-[clamp(1.25rem,2.5vw,3.6rem)] font-bold leading-none md:gap-3">
-                  <BlindsLine level={next} />
+                <div className="@container w-full">
+                  <div
+                    className="mt-3 flex items-center justify-center gap-2 whitespace-nowrap font-bold leading-none md:gap-3"
+                    style={{ fontSize: fitFont(blindsText(next), "clamp(1.25rem,2.5vw,3.6rem)", 0.8) }}
+                  >
+                    <BlindsLine level={next} />
+                  </div>
                 </div>
 
                 <div className="tv-xs mt-3 tracking-[0.2em] text-slate-500">
@@ -564,8 +583,13 @@ function BreakScreen({
             ПОСЛЕ ПЕРЕРЫВА · УРОВЕНЬ {view.levelNumber}
           </div>
           {level ? (
-            <div className="mt-3 flex items-center gap-2 whitespace-nowrap text-[clamp(1.8rem,2.8vw,4rem)] font-black leading-none tabular-nums">
-              <BlindsLine level={level} />
+            <div className="@container w-full">
+              <div
+                className="mt-3 flex items-center gap-2 whitespace-nowrap font-black leading-none tabular-nums"
+                style={{ fontSize: fitFont(blindsText(level), "clamp(1.8rem,2.8vw,4rem)", 0.8) }}
+              >
+                <BlindsLine level={level} />
+              </div>
             </div>
           ) : (
             <div className="mt-4 text-slate-500">—</div>
@@ -655,11 +679,14 @@ function BlindsUpOverlay({
         {firstLevel ? "SHUFFLE UP" : "BLINDS UP"}
       </div>
 
-      <div className="animate-blinds-rise relative mt-8">
+      <div className="animate-blinds-rise @container relative mt-8 w-full px-6">
         <div className="text-sm font-bold tracking-[0.5em] text-slate-400 xl:text-lg">
           УРОВЕНЬ {levelNumber}
         </div>
-        <div className="mt-4 flex items-center justify-center gap-4 whitespace-nowrap text-[clamp(3rem,7vw,8rem)] font-black leading-none tabular-nums tracking-tight">
+        <div
+          className="mt-4 flex items-center justify-center gap-4 whitespace-nowrap font-black leading-none tabular-nums tracking-tight"
+          style={{ fontSize: fitFont(`${formatChips(level.sb)} / ${formatChips(level.bb)}`, "clamp(3rem,7vw,8rem)", 0.8) }}
+        >
           <span>{formatChips(level.sb)}</span>
           <span className="text-amber-300/60">/</span>
           <span>{formatChips(level.bb)}</span>
@@ -697,16 +724,15 @@ function Blind({
   value: string;
 }) {
   return (
-    <div className="min-w-0 text-center">
+    <div className="@container min-w-0 px-2 text-center xl:px-3">
       <div className="tv-sm flex min-h-8 items-center justify-center font-bold tracking-[0.08em] text-slate-300">
         {label}
       </div>
 
-      {/* размер растёт с экраном; длинные числа (100 000) чуть мельче, чтобы влезли в колонку */}
+      {/* размер растёт с экраном, но число всегда помещается в свою колонку (даже 100 000) */}
       <div
-        className={`mt-1 whitespace-nowrap font-black tabular-nums leading-none tracking-tight text-amber-200 ${
-          value.length > 6 ? "text-[clamp(1.9rem,3.2vw,4.6rem)]" : "text-[clamp(2.4rem,4.1vw,6rem)]"
-        }`}
+        className="mt-1 whitespace-nowrap font-black tabular-nums leading-none tracking-tight text-amber-200"
+        style={{ fontSize: fitFont(value, "clamp(2.4rem,4.1vw,6rem)") }}
       >
         {value}
       </div>
