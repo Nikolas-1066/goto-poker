@@ -54,7 +54,7 @@ function mineMessage(db: DatabaseSync, chatId: number, account: Account, now: nu
   if (!list.length) return { chatId, text: "Вы пока никуда не записаны. Нажмите «Расписание», чтобы выбрать турнир.", keyboard: "menu" };
   const lines = ["📝 Ваши записи", ""];
   for (const s of list) {
-    lines.push(`• ${whenText(s)} — ${s.name}: ${s.state === "going" ? "записаны" : `лист ожидания, ${s.queue}-й`}${s.guests ? `, гостей ${s.guests}` : ""}`);
+    lines.push(`• ${whenText(s)} — ${s.name}: ${s.state === "going" ? "записаны" : `лист ожидания, номер ${s.queue}`}${s.guests ? `, гостей ${s.guests}` : ""}`);
   }
   return { chatId, text: lines.join("\n"), buttons: list.map((s) => [{ text: `Отменить: ${whenText(s)}`, data: `c:${s.scheduleId}` }]), keyboard: "menu" };
 }

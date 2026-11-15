@@ -33,7 +33,7 @@ export const NOT_YOUR_CONTACT = "Нужен именно ваш номер: на
 export const signedText = (s: Pick<MySignup, "name" | "date" | "time" | "guests" | "state" | "queue">) =>
   s.state === "going"
     ? `✅ Вы записаны: ${s.name}, ${whenText(s)}${s.guests ? `. С вами гостей: ${s.guests}` : ""}.`
-    : `⏳ Мест нет — вы в листе ожидания (${s.queue}-й в очереди): ${s.name}, ${whenText(s)}. Освободится место — пройдёте автоматически, я напишу.`;
+    : `⏳ Мест нет — вы в листе ожидания, номер ${s.queue}: ${s.name}, ${whenText(s)}. Освободится место — пройдёте автоматически, я напишу.`;
 
 export const cancelledText = (name: string, when: string) => `Запись отменена: ${name}, ${when}.`;
 

@@ -136,7 +136,7 @@ export function SignupBox({
             <span className="font-bold uppercase tracking-[0.12em] text-amber-300">Лист ожидания · {signups.waiting.length}</span>
             {href && (
               <Link href={href} className="text-slate-400 hover:text-amber-200">
-                вся очередь →
+                весь лист →
               </Link>
             )}
           </div>
@@ -155,7 +155,7 @@ export function SignupBox({
       {my && !form && (
         <div className={`mt-3 rounded-xl border p-3 text-sm ${my.state === "going" ? "border-emerald-400/40 bg-emerald-400/[0.07]" : "border-amber-300/40 bg-amber-300/[0.07]"}`}>
           <div className="font-bold">
-            {my.state === "going" ? "Вы записаны" : `Вы в листе ожидания — ${my.queue}-й в очереди`}
+            {my.state === "going" ? "Вы записаны" : `Вы в листе ожидания — номер ${my.queue}`}
             {my.guests > 0 && ` · с вами ${my.guests} ${my.guests === 1 ? "гость" : "гостя"}`}
           </div>
           {my.state === "waiting" && (
@@ -187,7 +187,7 @@ export function SignupBox({
 
       {signups.open && me?.status === "none" && (
         <Link href="/profile" className={`mt-3 block rounded-xl px-4 py-2.5 text-center text-sm ${GOLD}`}>
-          {full ? "Войти и встать в очередь" : "Войти и записаться"}
+          {full ? "Войти и записаться в лист ожидания" : "Войти и записаться"}
         </Link>
       )}
       {!signups.open && !my && <p className="mt-3 text-center text-xs text-slate-500">Запись закрыта — турнир уже начался.</p>}
@@ -201,7 +201,7 @@ export function SignupBox({
           >
             {full ? "Встать в лист ожидания" : "Записаться"}
           </button>
-          {full && <p className="mt-1.5 text-center text-xs text-slate-500">Мест нет. Освободится место — первый в очереди проходит сам.</p>}
+          {full && <p className="mt-1.5 text-center text-xs text-slate-500">Мест нет. Освободится место — первый из листа ожидания проходит сам.</p>}
         </>
       )}
 
@@ -300,12 +300,12 @@ export function SignupLists({ signups }: { signups: SiteSignups }) {
       </Panel>
       <Panel title={`Лист ожидания · ${signups.waiting.length}`} className="self-start">
         {signups.waiting.length === 0 ? (
-          <p className="text-sm text-slate-400">{signups.free === 0 ? "Очереди пока нет — можно встать первым." : "Пока есть свободные места — очереди нет."}</p>
+          <p className="text-sm text-slate-400">{signups.free === 0 ? "Лист ожидания пока пуст — можно записаться первым." : "Пока есть свободные места — лист ожидания не нужен."}</p>
         ) : (
           <>
             <ol className="divide-y divide-white/[0.06]">{signups.waiting.map((s, i) => row(s, i + 1, true))}</ol>
             <p className="mt-3 text-xs text-slate-500">
-              Очередь — по времени записи. Освободилось место — первый в очереди проходит сам и получает сообщение в Telegram. Запись с гостями проходит, когда
+              Порядок — по времени записи. Освободилось место — первый из листа ожидания проходит сам и получает сообщение в Telegram. Запись с гостями проходит, когда
               свободных мест хватает на всех.
             </p>
           </>
@@ -346,7 +346,7 @@ export function MySignupsPanel() {
                   {s.name}
                 </Link>
                 <div className={`text-sm ${s.state === "going" ? "text-emerald-300" : "text-amber-300"}`}>
-                  {s.state === "going" ? (s.started ? "Турнир открыт — вас ждут" : "Вы записаны") : `Лист ожидания — ${s.queue}-й в очереди`}
+                  {s.state === "going" ? (s.started ? "Турнир открыт — вас ждут" : "Вы записаны") : `Лист ожидания — номер ${s.queue}`}
                   {s.guests > 0 && <span className="text-slate-400"> · гостей: {s.guests}{s.guestNames.length ? ` (${s.guestNames.join(", ")})` : ""}</span>}
                 </div>
               </div>
