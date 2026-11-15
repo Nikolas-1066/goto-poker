@@ -70,6 +70,24 @@ body {
   animation: shine 2.5s linear infinite;
 }
 
+/* Заставка «ВЫЛЕТ»: красная вспышка, надпись падает сверху с лёгкой тряской */
+@keyframes bust-drop {
+  0% { transform: translateY(-60px) scale(1.25); opacity: 0; }
+  55% { transform: translateY(6px) scale(0.98); opacity: 1; }
+  70% { transform: translateX(-8px); }
+  80% { transform: translateX(7px); }
+  90% { transform: translateX(-4px); }
+  100% { transform: translateX(0); }
+}
+.animate-bust-drop { animation: bust-drop 0.8s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
+.text-shine-red {
+  background: linear-gradient(100deg, #f87171 20%, #fecaca 40%, #f87171 60%) 0 0 / 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shine 2.5s linear infinite;
+}
+
 /* Бегущая строка */
 @keyframes marquee {
   0% { transform: translateX(0); }

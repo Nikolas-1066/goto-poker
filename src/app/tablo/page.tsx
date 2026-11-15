@@ -4,7 +4,9 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import logo from "@/assets/logo.png";
 import { boardView, formatChips, formatClock, stepMs, type BoardView } from "@/lib/clock";
-import { playBreakStart, playLevelChange, playTick, playWarning, unlockAudio } from "@/lib/sound";
+import { playBreakStart, playBust, playLevelChange, playTick, playWarning, unlockAudio } from "@/lib/sound";
+import type { BoardBust } from "@/lib/db/board";
+import { Avatar } from "@/components/site/Avatar";
 import type { Tournament } from "@/lib/types";
 import { useTournament } from "@/lib/useTournament";
 import { useTvMode } from "@/lib/useTvMode";
@@ -13,6 +15,8 @@ import { RatingRotator, useBoardRating } from "@/components/board/RatingRotator"
 
 /** Сколько секунд показывать заставку BLINDS UP после начала уровня */
 const BLINDS_UP_MS = 6000;
+/** Сколько показывать заставку «ВЫЛЕТ» */
+const BUST_MS = 6000;
 /** Последние N мс уровня — красные пульсирующие цифры и тиканье */
 const FINAL_COUNTDOWN_MS = 10_000;
 
@@ -233,6 +237,8 @@ export default function Home() {
     view.step?.kind === "level" &&
     stepMs(view.step) - view.remainingMs < BLINDS_UP_MS;
 
+  const bust = useBustQueue(tournament?.updatedAt, !!blindsUp);
+
   return (
     <main className={`min-h-screen overflow-x-hidden bg-[#080e15] text-white ${cursorHidden ? "cursor-none" : ""}`}>
       {/* Background */}
@@ -255,6 +261,10 @@ export default function Home() {
 
         {footer}
       </div>
+
+      {bust && !blindsUp && (
+        <BustOverlay key={bust.key} bust={bust} rebuyOpen={!!view && (view.rebuyOpen || view.rebuyLate)} />
+      )}
 
       {blindsUp && view?.activeLevel && (
         <BlindsUpOverlay
@@ -655,6 +665,93 @@ function BreakScreen({
           )}
         </Panel>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Очередь заставок «ВЫЛЕТ»: новые вылеты (которых не было, когда табло открылось) показываются по одному,
+ * по 6 секунд. Пока идёт BLINDS UP — ждут. Вылет отменили, пока ждал, — не показывается.
+ */
+function useBustQueue(updatedAt: number | undefined, paused: boolean): BoardBust | null {
+  const busts = useBoardRating(updatedAt)?.busts;
+  const seen = useRef<Set<string> | null>(null);
+  const [queue, setQueue] = useState<BoardBust[]>([]);
+
+  useEffect(() => {
+    if (!busts) return;
+    // первая загрузка: что уже было — не показываем
+    if (seen.current == null) {
+      seen.current = new Set(busts.map((b) => b.key));
+      return;
+    }
+    const fresh = busts.filter((b) => !seen.current!.has(b.key));
+    fresh.forEach((b) => seen.current!.add(b.key));
+    const alive = new Set(busts.map((b) => b.key));
+    setQueue((q) => [...q.filter((b) => alive.has(b.key)), ...fresh]);
+  }, [busts]);
+
+  const current = queue[0] ?? null;
+  useEffect(() => {
+    if (!current || paused) return;
+    playBust();
+    const t = setTimeout(() => setQueue((q) => q.slice(1)), BUST_MS + 300);
+    return () => clearTimeout(t);
+  }, [current, paused]);
+
+  return current;
+}
+
+/** Полноэкранная заставка «ВЫЛЕТ»: кто вылетел, на каком месте, кто выбил */
+function BustOverlay({ bust, rebuyOpen }: { bust: BoardBust; rebuyOpen: boolean }) {
+  const many = bust.out.length > 1;
+  const ko = bust.knockers;
+  return (
+    <div className="animate-blinds-in pointer-events-none fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#05090e]/95 px-6 text-center backdrop-blur-sm">
+      <div className="animate-blinds-flash absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgb(248_113_113/0.45),transparent_65%)]" />
+
+      <div className="animate-bust-drop text-shine-red relative text-[clamp(3rem,8vw,9rem)] font-black leading-none tracking-[0.2em]">
+        {bust.out.length === 1 ? "ВЫЛЕТ" : bust.out.length === 2 ? "ДВОЙНОЙ ВЫЛЕТ" : bust.out.length === 3 ? "ТРОЙНОЙ ВЫЛЕТ" : `ВЫЛЕТ ×${bust.out.length}`}
+      </div>
+
+      <div className="animate-blinds-rise relative mt-[5vh] flex flex-wrap items-start justify-center gap-[6vw]">
+        {bust.out.map((p) => (
+          <div key={p.playerId} className="flex max-w-[40vw] flex-col items-center">
+            <Avatar
+              id={p.playerId}
+              name={p.name}
+              className={`border-4 border-red-400/70 text-red-200 shadow-[0_0_60px_rgba(248,113,113,0.35)] ${
+                many ? "h-[18vh] w-[18vh] text-[8vh]" : "h-[24vh] w-[24vh] text-[11vh]"
+              }`}
+            />
+            <div className={`mt-4 max-w-full truncate font-black leading-tight ${many ? "text-[clamp(2rem,4vw,5rem)]" : "text-[clamp(2.5rem,5.5vw,7rem)]"}`}>
+              {p.name}
+            </div>
+            {!rebuyOpen && p.place && (
+              <div className="mt-1 text-[clamp(1.25rem,2.5vw,3.25rem)] font-bold tabular-nums text-slate-300">{p.place} место</div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {ko.length > 0 && (
+        <div className="animate-blinds-rise relative mt-[5vh] flex flex-wrap items-center justify-center gap-x-5 gap-y-3 text-[clamp(1.5rem,3vw,4rem)] font-bold">
+          <span className="text-slate-400">{ko.length > 1 ? "Выбили:" : "Выбил:"}</span>
+          {ko.map((k, i) => (
+            <span key={k.playerId} className="flex items-center gap-3 text-amber-300">
+              <Avatar id={k.playerId} name={k.name} className="h-[7vh] w-[7vh] border-2 border-amber-300/70 text-[3vh] text-amber-200" />
+              {k.name}
+              {i < ko.length - 1 && <span className="text-slate-500">и</span>}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {rebuyOpen && (
+        <div className="animate-blinds-rise relative mt-[4vh] text-[clamp(1.1rem,2vw,2.6rem)] font-semibold text-emerald-300">
+          Re-entry открыт — можно вернуться в игру
+        </div>
+      )}
     </div>
   );
 }

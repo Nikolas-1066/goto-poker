@@ -138,6 +138,14 @@ export const SOUNDS = {
     osc.start(t0);
     osc.stop(t0 + 0.1);
   },
+  /** Вылет игрока: тяжёлый нисходящий аккорд — «бум» и спуск вниз */
+  bust(c: BaseAudioContext, dest: AudioNode) {
+    bell(c, dest, 523.25, 0.0, 0.5, 0.5); // C5
+    bell(c, dest, 415.3, 0.18, 0.5, 0.5); // G#4
+    bell(c, dest, 329.63, 0.36, 0.55, 0.6); // E4
+    bell(c, dest, 220.0, 0.6, 0.6, 1.6); // A3 — низкая, держится
+    bell(c, dest, 110.0, 0.6, 0.35, 1.6); // A2 — опора
+  },
   /** Осталась минута: два коротких «пинга» */
   warning(c: BaseAudioContext, dest: AudioNode) {
     bell(c, dest, 1174.66, 0.0, 0.35, 0.35);
@@ -145,7 +153,7 @@ export const SOUNDS = {
   },
 };
 
-function play(name: "levelUp" | "breakStart" | "warning") {
+function play(name: "levelUp" | "breakStart" | "warning" | "bust") {
   if (!ctx || !master || !audioReady()) return;
   SOUNDS[name](ctx, master);
 }
@@ -158,3 +166,4 @@ export function playTick(urgent = false) {
 export const playLevelChange = () => play("levelUp");
 export const playBreakStart = () => play("breakStart");
 export const playWarning = () => play("warning");
+export const playBust = () => play("bust");

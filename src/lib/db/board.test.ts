@@ -46,7 +46,7 @@ function finished(at: number, rows: [string, number, number][]) {
 
 describe("рейтинг на табло", () => {
   it("пусто — экранов нет", () => {
-    expect(boardRating(db, NOW)).toEqual({ seconds: 25, month: null, all: null, players: null, preview: null, chipLeaders: null });
+    expect(boardRating(db, NOW)).toEqual({ seconds: 25, month: null, all: null, players: null, preview: null, chipLeaders: null, busts: [] });
   });
 
   it("топ месяца и за всё время — только имена и очки, не больше N строк", () => {
@@ -79,6 +79,11 @@ describe("рейтинг на табло", () => {
     db.prepare("INSERT INTO knockouts (bust_event_id, knocker_participant_id, share) VALUES (?, ?, 1)").run(bust, pid["Саша"]);
 
     const b = boardRating(db, NOW);
+    // свежий вылет — для заставки «ВЫЛЕТ»: кто, место, кто выбил (имена и места, без телефонов)
+    expect(b.busts).toEqual([
+      { key: `e${bust}`, at: NOW + 1, out: [{ playerId: ids["Олег"], name: "Олег", place: "3" }], knockers: [{ playerId: ids["Саша"], name: "Саша" }] },
+    ]);
+    expect(boardRating(db, NOW + 6 * 60_000).busts).toEqual([]); // через 5 минут — уже не свежий
     expect(b.players).toEqual({
       playing: 2,
       total: 3,
@@ -99,6 +104,29 @@ describe("рейтинг на табло", () => {
         { name: "3 место", value: "23" },
       ],
     });
+  });
+
+  it("вылет двоих в одной раздаче — одна заставка; отменённый вылет не показывается", () => {
+    const tid = currentTournament(db).id;
+    const ins = db.prepare("INSERT INTO participants (tournament_id, player_id, status, registered_at) VALUES (?, ?, 'registered', ?)");
+    const ev = db.prepare("INSERT INTO events (tournament_id, participant_id, type, at, hand_id, hand_order, cancelled_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    const pid: Record<string, number> = {};
+    for (const n of ["Саша", "Ира", "Олег", "Женя"]) {
+      pid[n] = Number(ins.run(tid, ids[n], NOW).lastInsertRowid);
+      ev.run(tid, pid[n], "entry", NOW, null, null, null);
+    }
+    const ko = db.prepare("INSERT INTO knockouts (bust_event_id, knocker_participant_id, share) VALUES (?, ?, ?)");
+    const b1 = Number(ev.run(tid, pid["Олег"], "bust", NOW + 1, 1, 1, null).lastInsertRowid);
+    const b2 = Number(ev.run(tid, pid["Женя"], "bust", NOW + 1, 1, 2, null).lastInsertRowid);
+    ko.run(b1, pid["Саша"], 0.5);
+    ko.run(b1, pid["Ира"], 0.5);
+    ko.run(b2, pid["Саша"], 0.5);
+    ko.run(b2, pid["Ира"], 0.5);
+    ev.run(tid, pid["Ира"], "bust", NOW + 2, null, null, NOW + 3); // отменён
+    const busts = boardRating(db, NOW).busts;
+    expect(busts).toHaveLength(1);
+    expect(busts[0].out.map((o) => o.name).sort()).toEqual(["Женя", "Олег"]);
+    expect(busts[0].knockers.map((k) => k.name).sort()).toEqual(["Ира", "Саша"]);
   });
 
   it("лидеры по фишкам — только посчитанные стеки игроков в игре, трое", () => {
