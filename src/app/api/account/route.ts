@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
         // админам и владельцу — сообщение в Telegram о новой заявке
         const acc = sessionAccount(db, t)!;
         const known = !!db.prepare("SELECT 1 FROM players WHERE phone = ? AND archived_at IS NULL").get(acc.phone);
-        notifyRequest(db, { name: acc.name, phone: acc.phone, known }, "site");
+        notifyRequest(db, { accountId: acc.id, name: acc.name, phone: acc.phone, known }, "site");
         return t;
       });
       if (body.action === "login") noteLogin(key, !!fresh);

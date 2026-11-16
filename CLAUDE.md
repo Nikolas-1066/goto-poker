@@ -94,6 +94,9 @@ Telegram Mini App для игроков. Архитектуру делать т�
   действие `telegram` в `/api/account`; клиент — `src/components/site/telegramApp.ts`, `useMe.ts`). Адрес сайта для кнопки в боте —
   `PUBLIC_URL` или `data/public-url.txt` от `npm run tunnel` (`scripts/tunnel.mjs`, нужен `cloudflared`). Из интернета админка не
   пускает с паролем по умолчанию — нужен `ADMIN_PASSWORD` (`weakForPublic` в `src/lib/auth.ts`).
+- Достижения (`docs/SITE.md`, раздел «Достижения»): 25 штук, считаются из истории без хранения — `src/lib/achievements.ts`
+  (правила, `computeAchievements`), `src/lib/db/achievements.ts` (история всех игроков, доля игроков), показ — `Achievements.tsx`
+  на странице игрока и в кабинете; новые — в сообщении с итогами турнира (`sendResults`).
 - Отчёт владельцу после турнира: `src/lib/report.ts` (сдвиг мест, текст), `src/lib/db/report.ts`, `/api/report`;
   UI `src/components/admin/Report.tsx` (текст + «Скопировать» работает и по http, напоминание до копирования)
   и `ReportImages.tsx` (3 картинки на canvas без кассы). В карточке «Игроки» после завершения и в «Истории».

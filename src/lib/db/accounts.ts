@@ -20,6 +20,7 @@ import { finalistsOf, listPeriods, openPeriod, PERIOD_LABEL, standingsOf, type P
 import { createPlayer, getPlayer } from "./players";
 import type { PeriodKind } from "./settings";
 import { audit } from "./sqlite";
+import { chatOfAccount, enqueue, markRequestDone } from "./telegram";
 
 /** Вход держится 30 дней */
 export const SESSION_MS = 30 * 86_400_000;
@@ -160,11 +161,17 @@ export function confirmRequest(db: DatabaseSync, id: number, playerId: number | 
   if (db.prepare("SELECT 1 FROM accounts WHERE player_id = ?").get(target)) throw new Error(`У игрока «${player.name}» уже есть вход на сайт`);
   db.prepare("UPDATE accounts SET player_id = ?, confirmed_at = ? WHERE id = ?").run(target, now, id);
   audit(db, "account.confirm", { id, playerId: target, created }, now);
+  // в сообщении о заявке у админов — пометка; самому игроку (если подключён Telegram) — «заявка подтверждена»
+  markRequestDone(db, id, `✅ Подтверждена: ${created ? `новый игрок «${player.name}»` : `игрок «${player.name}»`}`, now);
+  enqueue(db, chatOfAccount(db, id), `✅ ${player.name}, ваша заявка подтверждена! Теперь в личном кабинете и в боте видны ваш рейтинг, статистика и достижения.`, { dedupe: `confirmed:${id}` }, now);
   return { playerId: target, created };
 }
 
 export function rejectRequest(db: DatabaseSync, id: number, now = Date.now()) {
   const row = pendingRow(db, id);
+  markRequestDone(db, id, "❌ Отклонена", now);
+  db.prepare("UPDATE accounts SET telegram_id = NULL WHERE id = ?").run(id);
+  db.prepare("DELETE FROM telegram_codes WHERE account_id = ?").run(id);
   db.prepare("DELETE FROM account_sessions WHERE account_id = ?").run(id);
   db.prepare("DELETE FROM accounts WHERE id = ?").run(id);
   audit(db, "account.reject", { id, name: row.name }, now);

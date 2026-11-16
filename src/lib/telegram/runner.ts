@@ -49,7 +49,7 @@ function inline(buttons: TgMessage["buttons"]) {
 async function send(m: Pick<TgMessage, "chatId" | "text" | "buttons" | "keyboard">) {
   const rows = inline(m.buttons);
   // сообщение было только ради кнопки мини-приложения, а адреса нет — не отправляем
-  if (m.buttons?.length && !rows && !m.keyboard) return { ok: true as const, result: null };
+  if (m.buttons?.length && !rows && !m.keyboard) return { ok: true as const, result: null as { message_id: number } | null };
   const reply_markup = rows
     ? { inline_keyboard: rows }
     : m.keyboard === "menu"
@@ -57,7 +57,7 @@ async function send(m: Pick<TgMessage, "chatId" | "text" | "buttons" | "keyboard
       : m.keyboard === "contact"
         ? CONTACT_KEYBOARD
         : undefined;
-  return call("sendMessage", { chat_id: m.chatId, text: m.text, ...(reply_markup ? { reply_markup } : {}) });
+  return call<{ message_id: number } | null>("sendMessage", { chat_id: m.chatId, text: m.text, ...(reply_markup ? { reply_markup } : {}) });
 }
 
 /** Отправить то, что накопилось в очереди */
@@ -65,9 +65,15 @@ async function flush() {
   const list = await withDatabase((db) => pendingOutbox(db));
   for (const m of list) {
     try {
-      const res = await send({ chatId: m.chatId, text: m.text, buttons: m.buttons ?? undefined });
-      // 403 — игрок остановил бота, 400 — чата нет: повторять бессмысленно
-      await withDatabase((db) => (res.ok ? markSent(db, m.id) : markFailed(db, m.id, res.description ?? "ошибка", res.error_code === 403 || res.error_code === 400)));
+      // правка уже отправленного сообщения (например, «✅ Подтверждена» в заявке) или новое сообщение
+      const res = m.editMessageId
+        ? await call<{ message_id: number }>("editMessageText", { chat_id: m.chatId, message_id: m.editMessageId, text: m.text })
+        : await send({ chatId: m.chatId, text: m.text, buttons: m.buttons ?? undefined });
+      const messageId = res.ok && res.result && typeof res.result === "object" && "message_id" in res.result ? Number(res.result.message_id) : null;
+      // 403 — игрок остановил бота, 400 — чата нет или сообщение уже нельзя исправить: повторять бессмысленно
+      await withDatabase((db) =>
+        res.ok ? markSent(db, m.id, Date.now(), messageId) : markFailed(db, m.id, res.description ?? "ошибка", res.error_code === 403 || res.error_code === 400),
+      );
       if (!res.ok && res.error_code === 429) await sleep(3000);
     } catch (err) {
       await withDatabase((db) => markFailed(db, m.id, err instanceof Error ? err.message : "нет связи"));

@@ -347,4 +347,10 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX telegram_outbox_unsent ON telegram_outbox (sent_at) WHERE sent_at IS NULL;
   `,
+  // 12 — Telegram: номер отправленного сообщения (message_id) и правка уже отправленного (edit_of — ключ dedupe
+  // исходного сообщения). Так сообщение о заявке на вход исправляется на «✅ Подтверждена», а не приходит новое.
+  `
+  ALTER TABLE telegram_outbox ADD COLUMN message_id INTEGER;
+  ALTER TABLE telegram_outbox ADD COLUMN edit_of TEXT;
+  `,
 ];

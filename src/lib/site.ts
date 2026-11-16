@@ -1,6 +1,7 @@
 // Сайт клуба (docs/SITE.md, шаг 2): типы открытых данных и текст «О клубе» — чистые функции.
 // На сайт уходят только имена, места, очки, нокауты и ELO. Телефоны, заметки, касса и долги — никогда.
 
+import type { AchievementView } from "./achievements";
 import type { SiteSignups } from "./signup";
 
 export type SiteStanding = { rank: number; playerId: number; name: string; points: number; tournaments: number; wins: number; ko: number };
@@ -75,6 +76,8 @@ export type SitePlayer = {
   ratings: { label: string; rank: number | null; of: number; points: number }[];
   finals: string[];
   tournaments: { id: number; name: string; kindLabel: string; at: number; field: number; place: string; points: number | null; ko: number }[];
+  /** Достижения: все, с отметкой «получено», прогрессом и долей игроков (видны всем — решение владельца) */
+  achievements: AchievementView[];
 };
 
 export type SiteScheduleItem = {

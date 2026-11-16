@@ -4,9 +4,11 @@
 // и в его личном кабинете.
 
 import { formatSiteDate, type SitePlayer } from "@/lib/site";
+import { AchievementsPanel } from "./Achievements";
 import { formatKo, Muted, Panel } from "./SiteShell";
 
-export function PlayerStats({ p }: { p: SitePlayer }) {
+/** showLocked — достижения со всеми ещё не полученными (личный кабинет) */
+export function PlayerStats({ p, showLocked = false }: { p: SitePlayer; showLocked?: boolean }) {
   return (
     <>
     <div className="mb-4 grid grid-cols-3 gap-2 sm:grid-cols-6">
@@ -23,6 +25,10 @@ export function PlayerStats({ p }: { p: SitePlayer }) {
           <div className="mt-0.5 text-[11px] uppercase tracking-[0.15em] text-slate-500">{label}</div>
         </div>
       ))}
+    </div>
+
+    <div className="mb-4">
+      <AchievementsPanel list={p.achievements} showLocked={showLocked} />
     </div>
 
     <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">

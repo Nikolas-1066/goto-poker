@@ -26,6 +26,7 @@ import {
   type SiteStanding,
 } from "../site";
 import { finalistsOf, getPeriod, listPeriods, openPeriod, PERIOD_LABEL, standingsOf, type Period } from "./periods";
+import { playerAchievements } from "./achievements";
 import { playerCard } from "./playercard";
 import { ensureSchedule, listSchedule } from "./schedule";
 import { getSettings, type PeriodKind } from "./settings";
@@ -235,6 +236,7 @@ export function sitePlayer(db: DatabaseSync, playerId: number): SitePlayer | nul
         points: t.points,
         ko: t.ko,
       })),
+    achievements: playerAchievements(db, card.player.id),
   };
 }
 

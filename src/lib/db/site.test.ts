@@ -189,7 +189,13 @@ describe("страница игрока", () => {
     expect(p).toMatchObject({ id: ids["Саша"], name: "Саша", stats: { tournaments: 2, wins: 1, top3: 2, bestPlace: 1, ko: 1, points: 105 } });
     expect(p.tournaments.map((t) => [t.name, t.place, t.points, t.field])).toEqual([["Второй", "2", 45, 2], ["Первый", "1", 60, 2]]);
     expect(p.ratings.map((r) => r.label)).toEqual(["Месяц · Ноябрь", "За всё время"]);
-    expect(Object.keys(p).sort()).toEqual(["elo", "eloGames", "finals", "id", "name", "ratings", "stats", "tournaments"]);
+    expect(Object.keys(p).sort()).toEqual(["achievements", "elo", "eloGames", "finals", "id", "name", "ratings", "stats", "tournaments"]);
+    // у Саши: первый турнир и первая победа; у Иры тоже — значит, есть у 100% сыгравших (их двое)
+    expect(p.achievements.filter((a) => a.earned).map((a) => [a.id, a.percent])).toEqual([
+      ["games_1", 100],
+      ["wins_1", 100],
+    ]);
+    expect(p.achievements.find((a) => a.id === "games_10")).toMatchObject({ earned: null, have: 2, need: 10, percent: 0 });
     expectNoSecrets(p);
     expect(sitePlayer(db, 999)).toBeNull();
   });

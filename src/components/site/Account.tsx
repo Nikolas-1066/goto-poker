@@ -240,7 +240,7 @@ function MyStats({ playerId, name }: { playerId: number; name: string }) {
   const { data, error, loading } = useSite<SitePlayer>(`player&id=${playerId}&n=${encodeURIComponent(name)}`);
   if (loading) return <Muted>Загрузка…</Muted>;
   if (!data) return <Muted>{error || "Не удалось загрузить"}</Muted>;
-  return <PlayerStats p={data} />;
+  return <PlayerStats p={data} showLocked />;
 }
 
 /** Путь в финал месяца: полоса — сколько очков набрано из тех, что нужны для зоны финала */

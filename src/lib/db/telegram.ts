@@ -74,7 +74,7 @@ export function linkByPhone(db: DatabaseSync, telegramId: number, phoneInput: un
     );
     created = !free;
     audit(db, free ? "account.telegram" : "account.register", { id, via: "telegram" }, now);
-    if (created) notifyRequest(db, { name, phone, known: !!player }, "bot", now);
+    if (created) notifyRequest(db, { accountId: id, name, phone, known: !!player }, "bot", now);
   }
   attach(db, id, telegramId, "phone", now);
   return { account: accountByTelegram(db, telegramId)!, created };
@@ -119,7 +119,8 @@ export function setRole(db: DatabaseSync, playerId: number, role: unknown, now =
 
 // ---------- Очередь сообщений ----------
 
-export type Outgoing = { id: number; chatId: number; text: string; buttons: TgButton[][] | null };
+/** editMessageId — это правка уже отправленного сообщения с таким номером (а не новое сообщение) */
+export type Outgoing = { id: number; chatId: number; text: string; buttons: TgButton[][] | null; editMessageId: number | null };
 
 /**
  * Поставить сообщение в очередь. dedupe — ключ «это уже отправляли» (напоминание об этом турнире этому игроку…):
@@ -137,13 +138,24 @@ export function enqueue(db: DatabaseSync, chatId: number | null, text: string, o
 export function pendingOutbox(db: DatabaseSync, now = Date.now(), limit = 25): Outgoing[] {
   return (
     db
-      .prepare("SELECT id, chat_id, text, buttons FROM telegram_outbox WHERE sent_at IS NULL AND tries < 5 AND created_at > ? ORDER BY id LIMIT ?")
-      .all(now - 86_400_000, limit) as { id: number; chat_id: number; text: string; buttons: string | null }[]
-  ).map((r) => ({ id: r.id, chatId: r.chat_id, text: r.text, buttons: r.buttons ? (JSON.parse(r.buttons) as TgButton[][]) : null }));
+      .prepare(
+        `SELECT o.id, o.chat_id, o.text, o.buttons, src.message_id AS edit_message_id
+         FROM telegram_outbox o LEFT JOIN telegram_outbox src ON src.dedupe = o.edit_of
+         WHERE o.sent_at IS NULL AND o.tries < 5 AND o.created_at > ? ORDER BY o.id LIMIT ?`,
+      )
+      .all(now - 86_400_000, limit) as { id: number; chat_id: number; text: string; buttons: string | null; edit_message_id: number | null }[]
+  ).map((r) => ({
+    id: r.id,
+    chatId: r.chat_id,
+    text: r.text,
+    buttons: r.buttons ? (JSON.parse(r.buttons) as TgButton[][]) : null,
+    editMessageId: r.edit_message_id,
+  }));
 }
 
-export function markSent(db: DatabaseSync, id: number, now = Date.now()) {
-  db.prepare("UPDATE telegram_outbox SET sent_at = ?, error = NULL WHERE id = ?").run(now, id);
+/** Отправлено; messageId — номер сообщения в Telegram (чтобы потом его можно было исправить) */
+export function markSent(db: DatabaseSync, id: number, now = Date.now(), messageId: number | null = null) {
+  db.prepare("UPDATE telegram_outbox SET sent_at = ?, error = NULL, message_id = ? WHERE id = ?").run(now, messageId, id);
 }
 
 /** Не отправилось. final — пробовать больше не нужно (игрок заблокировал бота и т.п.) */
@@ -153,9 +165,32 @@ export function markFailed(db: DatabaseSync, id: number, error: string, final = 
 
 // ---------- Служебные сообщения ----------
 
-/** Новая заявка на вход — админам и владельцу */
-export function notifyRequest(db: DatabaseSync, r: { name: string; phone: string; known: boolean }, from: "site" | "bot", now = Date.now()) {
-  for (const chat of staffChats(db)) enqueue(db, chat, requestText(r.name, formatPhone(r.phone), r.known, from), {}, now);
+/** Новая заявка на вход — админам и владельцу. Ключ сообщения запоминается: при подтверждении его исправят. */
+export function notifyRequest(db: DatabaseSync, r: { accountId: number; name: string; phone: string; known: boolean }, from: "site" | "bot", now = Date.now()) {
+  for (const chat of staffChats(db)) enqueue(db, chat, requestText(r.name, formatPhone(r.phone), r.known, from), { dedupe: `request:${r.accountId}:${chat}` }, now);
+}
+
+/**
+ * Заявку подтвердили или отклонили: в уже пришедшем админам сообщении о заявке появляется пометка
+ * («✅ Подтверждена…» / «❌ Отклонена»). Ещё не отправленное — просто меняется; отправленное — исправляется в Telegram.
+ */
+export function markRequestDone(db: DatabaseSync, accountId: number, verdict: string, now = Date.now()) {
+  const rows = db
+    .prepare("SELECT id, chat_id, text, sent_at, dedupe FROM telegram_outbox WHERE dedupe LIKE ? AND edit_of IS NULL")
+    .all(`request:${accountId}:%`) as { id: number; chat_id: number; text: string; sent_at: number | null; dedupe: string }[];
+  for (const r of rows) {
+    const text = clip(`${r.text}\n\n${verdict}`);
+    if (r.sent_at == null) db.prepare("UPDATE telegram_outbox SET text = ? WHERE id = ?").run(text, r.id);
+    else {
+      db.prepare("INSERT OR IGNORE INTO telegram_outbox (chat_id, text, dedupe, edit_of, created_at) VALUES (?, ?, ?, ?, ?)").run(
+        r.chat_id,
+        text,
+        `done:${r.dedupe}`,
+        r.dedupe,
+        now,
+      );
+    }
+  }
 }
 
 /** Анонс клуба — всем, у кого подключён Telegram. Возвращает, скольким поставлено. */

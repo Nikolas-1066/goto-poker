@@ -4,12 +4,12 @@ import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { applyAction } from "../clock";
-import { confirmRequest, listRequests, register, sessionAccount } from "../db/accounts";
+import { confirmRequest, listRequests, register, rejectRequest, sessionAccount } from "../db/accounts";
 import { createPlayer } from "../db/players";
 import { addItem, linkOpened, markOpened } from "../db/schedule";
 import { listSignups, signUp, syncSignups } from "../db/signups";
 import { loadState, openStore, transaction, writeState } from "../db/sqlite";
-import { accountByTelegram, announce, createLinkCode, pendingOutbox, roleOfPlayer, setRole } from "../db/telegram";
+import { accountByTelegram, announce, createLinkCode, markSent, pendingOutbox, roleOfPlayer, setRole } from "../db/telegram";
 import { askComing, dropLate, remindToday, sendResults, staffReports } from "../db/telegramJobs";
 import { applyPlayerAction, archiveCurrentIfUsed, currentTournament, listParticipants } from "../db/tournament";
 import { openedTournament } from "../schedule";
@@ -82,6 +82,31 @@ describe("привязка Telegram", () => {
     expect(listRequests(db)).toMatchObject([{ name: "Алекс", phone: "+79995556677", match: null }]);
     expect(outbox()).toEqual([[200, expect.stringContaining("Заявка на вход (из бота): Алекс")]]);
     expect(text(100, MENU.rating).messages[0].text).toContain("подтвердит вашу заявку");
+  });
+
+  it("заявку подтвердили — у админа то же сообщение исправляется на «✅ Подтверждена», игроку — «заявка подтверждена»", () => {
+    contact(200, "79000000001");
+    setRole(db, ids["Ира"], "admin", NOW);
+    contact(100, "+7 999 555-66-77"); // новичок — заявка
+    const [msg] = pendingOutbox(db, NOW + 1000);
+    expect(msg).toMatchObject({ chatId: 200, editMessageId: null });
+    markSent(db, msg.id, NOW + 1000, 777); // Telegram вернул номер сообщения
+    const acc = accountByTelegram(db, 100)!;
+    confirmRequest(db, acc.id, null, NOW + 2000);
+    const out = pendingOutbox(db, NOW + 3000);
+    expect(out).toEqual([
+      expect.objectContaining({ chatId: 200, editMessageId: 777, text: expect.stringMatching(/Заявка на вход[\s\S]*\n\n✅ Подтверждена: новый игрок «Алекс»$/) }),
+      expect.objectContaining({ chatId: 100, editMessageId: null, text: expect.stringContaining("ваша заявка подтверждена") }),
+    ]);
+  });
+
+  it("заявку отклонили, пока сообщение ещё не ушло, — уходит сразу с пометкой «❌ Отклонена»", () => {
+    contact(200, "79000000001");
+    setRole(db, ids["Ира"], "admin", NOW);
+    contact(100, "+7 999 555-66-77");
+    rejectRequest(db, accountByTelegram(db, 100)!.id, NOW + 1000);
+    expect(pendingOutbox(db, NOW + 2000)).toEqual([expect.objectContaining({ chatId: 200, editMessageId: null, text: expect.stringMatching(/❌ Отклонена$/) })]);
+    expect(accountByTelegram(db, 100)).toBeNull();
   });
 
   it("ссылка из кабинета: одноразовый код привязывает чат к входу с сайта", () => {
@@ -243,7 +268,10 @@ describe("сообщения от бота", () => {
     const tid = currentTournament(db).id;
     expect(sendResults(db, tid, NOW + 7000)).toEqual({ sent: 2, linked: 2, players: 3 });
     expect(sendResults(db, tid, NOW + 8000)).toMatchObject({ sent: 0 });
-    expect(pendingOutbox(db, NOW + 9000).at(-1)!.text).toContain("Ваше место: 2 из 3");
+    const results = pendingOutbox(db, NOW + 9000).slice(-2).map((m) => m.text);
+    expect(results.find((t) => t.includes("Ваше место: 2 из 3"))).toContain("🏆 Новые достижения: 🎟 Первый турнир");
+    // победитель с двумя нокаутами: первый турнир и первая победа
+    expect(results.find((t) => t.includes("Ваше место: 1 из 3"))).toContain("🎟 Первый турнир, 🥇 Первая победа");
   });
 
   it("анонс — всем, у кого подключён Telegram", () => {

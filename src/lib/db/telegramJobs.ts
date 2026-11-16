@@ -9,7 +9,9 @@ import { reportText } from "../report";
 import { clubTime, clubToday, hasStarted } from "../schedule";
 import { askComingText, finalistText, reminderText, removedText, resultText, staffReportText } from "../telegram/texts";
 import type { Db, Tournament } from "../types";
+import { achievementsLine } from "../achievements";
 import { getFinalistMessage } from "./accounts";
+import { earnedInPeriod, earnedInTournament, loadHistories } from "./achievements";
 import { finalistsOf, listPeriods, PERIOD_LABEL, type Period } from "./periods";
 import { tournamentReport } from "./report";
 import { listSchedule } from "./schedule";
@@ -121,11 +123,13 @@ export function sendResults(db: DatabaseSync, tournamentId: number, now = Date.n
     .all(tournamentId) as { player_id: number; name: string; place: number; place_to: number | null; ko: number; points: number | null }[];
   let sent = 0;
   let linked = 0;
+  const histories = loadHistories(db);
   for (const r of rows) {
     const chat = chatOfPlayer(db, r.player_id);
     if (chat == null) continue;
     linked += 1;
-    const text = resultText(report, { place: r.place, placeTo: r.place_to, ko: r.ko, points: r.points }, r.name);
+    const got = achievementsLine(earnedInTournament(histories, r.player_id, tournamentId));
+    const text = resultText(report, { place: r.place, placeTo: r.place_to, ko: r.ko, points: r.points }, r.name, got);
     if (enqueue(db, chat, text, { dedupe: `result:${tournamentId}:${r.player_id}` }, now)) sent += 1;
   }
   return { sent, linked, players: rows.length };
@@ -143,12 +147,15 @@ export function sendFinalists(db: DatabaseSync, now = Date.now()): { sent: numbe
   }
   let sent = 0;
   let finalists = 0;
+  const histories = loadHistories(db);
   for (const p of lastClosed.values()) {
     if (played.get(p.id)) continue;
     for (const f of finalistsOf(db, p).finalists) {
       finalists += 1;
       // текст поменяли — финалист получит новый; тот же самый второй раз не уйдёт
-      if (enqueue(db, chatOfPlayer(db, f.playerId), finalistText([`${PERIOD_LABEL[p.kind]} · ${p.name}`], message), { dedupe: `finalist:${p.id}:${f.playerId}:${key}` }, now)) sent += 1;
+      const got = achievementsLine(earnedInPeriod(histories, f.playerId, p.id));
+      const text = finalistText([`${PERIOD_LABEL[p.kind]} · ${p.name}`], message, got);
+      if (enqueue(db, chatOfPlayer(db, f.playerId), text, { dedupe: `finalist:${p.id}:${f.playerId}:${key}` }, now)) sent += 1;
     }
   }
   if (!finalists) throw new Error("Сейчас нет финалистов: месяц ещё не закрыт или финал уже сыгран");

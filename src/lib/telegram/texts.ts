@@ -57,12 +57,14 @@ export function ratingText(name: string, month: { label: string; zone: FinalZone
 const placeText = (p: { place: number | null; placeTo: number | null }) => (p.place == null ? "—" : p.placeTo ? `${p.place}–${p.placeTo}` : String(p.place));
 
 /** Итоги турнира одному участнику: место, очки, нокауты, место в рейтинге */
-export function resultText(r: TournamentReport, me: { place: number | null; placeTo: number | null; ko: number; points: number | null }, name: string) {
+/** achievements — новые достижения за этот турнир строкой («🎩 Хет-трик, 🥇 Первая победа»), пусто — нет */
+export function resultText(r: TournamentReport, me: { place: number | null; placeTo: number | null; ko: number; points: number | null }, name: string, achievements = "") {
   const lines = [`🏁 ${r.tournament.name} — итоги`, `Ваше место: ${placeText(me)} из ${r.tournament.players}`];
   if (me.points != null) lines.push(`Очки: +${me.points}`);
   if (me.ko) lines.push(`Нокауты: ${formatKo(me.ko)}`);
   const row = r.rating?.participants.find((p) => p.name === name);
   if (row && r.rating) lines.push(`Рейтинг (${r.rating.periodName}): ${row.before ?? "—"} → ${row.after} место, всего ${row.points} оч.`);
+  if (achievements) lines.push("", `🏆 Новые достижения: ${achievements}`);
   return lines.join("\n");
 }
 
@@ -76,7 +78,8 @@ export function staffReportText(r: TournamentReport) {
 export const requestText = (name: string, phone: string, known: boolean, from: "site" | "bot") =>
   `🆕 Заявка на вход (${from === "bot" ? "из бота" : "с сайта"}): ${name}, ${phone}. ${known ? "Телефон есть в базе." : "Новый человек — такого телефона в базе нет."} Подтвердить — в админке, «Игроки».`;
 
-export const finalistText = (periods: string[], message: string) => `★ Поздравляем — вы в финале: ${periods.join(", ")}!${message ? `\n\n${message}` : "\n\nДату и время финала сообщит клуб."}`;
+export const finalistText = (periods: string[], message: string, achievements = "") =>
+  `★ Поздравляем — вы в финале: ${periods.join(", ")}!${message ? `\n\n${message}` : "\n\nДату и время финала сообщит клуб."}${achievements ? `\n\n🏆 Новые достижения: ${achievements}` : ""}`;
 
 /** Telegram не принимает сообщения длиннее 4096 символов */
 export const clip = (text: string, max = 4000) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
