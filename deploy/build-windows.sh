@@ -35,7 +35,7 @@ mkdir -p "$SYS/app/.next"
 cp -R .next/static "$SYS/app/.next/static"
 [ -d public ] && cp -R public "$SYS/app/public"
 # Лишнее: локальная база разработчика и нативные модули картинок (не используются)
-rm -rf "$SYS/app/data" "$SYS/app/.env"* "$SYS/app/node_modules/sharp" "$SYS/app/node_modules/@img" "$SYS/app/deploy" "$SYS/app/dist"
+rm -rf "$SYS/app/data" "$SYS/app/.env"* "$SYS/app/node_modules/sharp" "$SYS/app/node_modules/@img" "$SYS/app/deploy" "$SYS/app/dist" "$SYS/app/restore"
 
 NATIVE=$(find "$SYS/app" -name '*.node' | head -5 || true)
 if [ -n "$NATIVE" ]; then
