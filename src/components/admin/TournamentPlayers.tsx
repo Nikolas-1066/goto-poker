@@ -9,6 +9,7 @@ import { debtWarning, formatRub, friendBonusText, type CashSummary, type PayMeth
 import { formatEloDelta } from "@/lib/rating/elo";
 import { formatPlace } from "@/lib/results";
 import { phoneTail, searchPlayers, type Player } from "@/lib/players";
+import { PasteList } from "./PasteList";
 import { DEFAULT_SEATING, formatSeat, MAX_SEATS, MAX_TABLES, type Seat, type SeatingSettings } from "@/lib/seating";
 import type { Tournament } from "@/lib/types";
 import { CashLine, CashPanel, EnterButtons, OldDebtBadge, OldDebtsPanel, PayBadge } from "./Cash";
@@ -294,6 +295,17 @@ export function TournamentPlayers({ tournament, rebuyOpen, addonOpen, onChanged 
       {/* Поиск и добавление */}
       {!finished && (
         <div>
+          <div className="mb-2 flex flex-wrap justify-end">
+            <PasteList
+              target={{ kind: "tournament" }}
+              title="в этот турнир"
+              onDone={(message) => {
+                showToast(message, null);
+                loadParticipants();
+                loadPlayers();
+              }}
+            />
+          </div>
           <input
             className={inputClass}
             placeholder="Найти или добавить игрока"

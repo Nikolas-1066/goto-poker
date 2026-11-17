@@ -7,9 +7,13 @@ import { useState } from "react";
 import type { AdminSignup } from "@/lib/db/signups";
 import { searchPlayers, type Player } from "@/lib/players";
 import { MAX_GUESTS } from "@/lib/signup";
+import { PasteList } from "./PasteList";
 import { Button, inputClass } from "./ui";
 
 export function ScheduleSignups({
+  scheduleId,
+  title,
+  onImported,
   signups,
   seatLimit,
   players,
@@ -17,6 +21,10 @@ export function ScheduleSignups({
   onAdd,
   onRemove,
 }: {
+  scheduleId: number;
+  title: string;
+  /** Список из Google-таблицы записан — обновить расписание */
+  onImported: (message: string) => void;
   signups: AdminSignup[];
   seatLimit: number | null;
   players: Player[];
@@ -96,6 +104,9 @@ export function ScheduleSignups({
               </button>
             ))}
             {query.trim() && found.length === 0 && <div className="mt-2 text-sm text-slate-500">Никого не нашлось (или игрок уже записан).</div>}
+            <div className="mt-2">
+              <PasteList target={{ kind: "schedule", id: scheduleId }} title={title} onDone={onImported} />
+            </div>
           </div>
         </div>
       )}

@@ -59,6 +59,20 @@ function Schedule() {
       .catch(() => {});
   }, []);
 
+  /** Обновить расписание с записями и список игроков (после «Вставить список» появляются новые) */
+  function reload() {
+    fetch("/api/schedule", { cache: "no-store" })
+      .then(async (r) => {
+        const d = await r.json();
+        if (r.ok) setData({ today: d.today, items: d.items, templates: d.templates, signups: d.signups ?? {} });
+      })
+      .catch(() => {});
+    fetch("/api/players", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { players: [] }))
+      .then((d) => setPlayers(d.players ?? []))
+      .catch(() => {});
+  }
+
   async function act(action: object, confirmText?: string): Promise<boolean> {
     if (confirmText && !(await askConfirm(confirmText))) return false;
     setBusy(true);
@@ -164,6 +178,13 @@ function Schedule() {
                   signups={
                     it.status === "cancelled" ? null : (
                       <ScheduleSignups
+                        scheduleId={it.id}
+                        title={`${it.name}, ${formatDay(it.date)}`}
+                        onImported={(message) => {
+                          setError("");
+                          setFlash(message);
+                          reload();
+                        }}
                         signups={data.signups?.[it.id] ?? []}
                         seatLimit={it.seatLimit}
                         players={players}
