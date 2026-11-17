@@ -106,7 +106,7 @@ Telegram Mini App для игроков. Архитектуру делать т�
 
 ## Стек и важные особенности
 
-- **Next.js 16.4 (App Router) + React 19.3 + Tailwind 4 + TypeScript.** Это НЕ та Next.js,
+- **Next.js 16.4.6 (App Router) + React 19.3 + Tailwind 4 + TypeScript.** Это НЕ та Next.js,
   что в обучающих данных: перед кодом читай `node_modules/next/dist/docs/` (см. `AGENTS.md`).
 - `next.config.ts`: `cacheComponents: true` → **в клиентских компонентах нельзя вызывать
   `Date.now()`, `Math.random()`, `new Date()` во время рендера** (страница зависает при пререндере).
