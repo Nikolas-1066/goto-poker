@@ -52,3 +52,7 @@ next-env.d.ts
 
 # лог сборки пакета
 /build-windows.log
+
+# служебное
+/.claude/
+*.tmp
